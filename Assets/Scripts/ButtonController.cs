@@ -49,10 +49,14 @@ public class ButtonController : MonoBehaviour {
         switch (controller.GetGameState())
         {
             case "mustLogin": controller.ChangeState("started"); break;
-            case "loggingIn": controller.ChangeState("started"); break;    //meaning that the auth rejected them
+
             case "loggedIn": controller.ChangeState("listFaceImages"); break;
             case "addingImgWebcam": controller.ChangeState("started"); break;
-            case "deletePhoto": controller.ChangeState("started"); break;  //meaning that the auth rejected them
+
+            // cases in which user is rejected by the Identify call
+            case "loggingIn":
+            case "addingImgCheckPic":
+            case "deletePhoto": controller.ChangeState("started"); break;
 
             // current solution when receiving an API error: start over and hope it goes away :P
             case "apiErrorCreate": 

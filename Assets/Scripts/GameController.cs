@@ -117,15 +117,23 @@ public class GameController : MonoBehaviour {
                         return;
                     }
 
-                    //debug
-                    savedFrame = frame;
-
                     if (numFaces < 1)   //pic has no detectable faces in it... try again.
                         ChangeState("addingImgTryAgain");
                     else
                     {
-                        savedFrame = frame;
-                        ChangeState("addingImgShowPic");
+                        if (!ShouldBeAuthenticated())
+                        {
+                            savedFrame = frame;
+                            ChangeState("addingImgShowPic");
+                        }
+                        else
+                        {
+                            if (await VerifyAsync(true, frame))    //if they pass authentification
+                            {
+                                savedFrame = frame;
+                                ChangeState("addingImgShowPic");
+                            }
+                        }
                     }
                     break;
                 case "addingImgTryAgain":
@@ -439,11 +447,19 @@ public class GameController : MonoBehaviour {
         return false;
     }
 
-    private async Task<bool> VerifyAsync(bool showRejectionPrompt = false)
+    private async Task<bool> VerifyAsync(bool showRejectionPrompt = false, Sprite imgToCheck = null)
     {
-        adjuster.EnableCamera();
-        await Task.Delay(CAM_DELAY_MS); //add delay so that the camera can turn on and focus
-        Sprite frame = adjuster.GrabCurrentWebcamFrame();
+        Sprite frame;
+
+        if (imgToCheck == null)
+        {
+            adjuster.EnableCamera();
+            await Task.Delay(CAM_DELAY_MS); //add delay so that the camera can turn on and focus
+            frame = adjuster.GrabCurrentWebcamFrame();
+        }
+        else
+            frame = imgToCheck;
+
         UIPromptNoButtonPopUp("Hold on, I'm thinking... (identifying faces in current frame)");
         byte[] frameData = frame.texture.EncodeToPNG();
 
