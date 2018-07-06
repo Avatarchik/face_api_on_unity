@@ -24,8 +24,8 @@ public class GameController : MonoBehaviour {
     private FaceAPIHelper apiHelper;
 
     public static readonly string SAVE_PATH = DetermineSavePath();
-    public static readonly string UNKNOWN_IMG = "Stock Images/unknown";
-    public static readonly string SADFACE_IMG = "Stock Images/sad";
+    public static readonly string UNKNOWN_IMG = Path.Combine("Stock Images", "unknown");
+    public static readonly string SADFACE_IMG = Path.Combine("Stock Images", "sad");
     const string PERSON_GROUP_ID = "unity";
     const decimal CONFIDENCE_THRESHOLD = 0.70m;    // decimal between 0 and 1
     const int CAM_DELAY_MS = 2000;
@@ -212,23 +212,23 @@ public class GameController : MonoBehaviour {
 
     private void CreateProfile()
     {
-        if (Directory.Exists(SAVE_PATH + "/" + loggedInName))
+        if (Directory.Exists(Path.Combine(SAVE_PATH, loggedInName)))
         {
             multipleNames = true;
             int count = Directory.GetDirectories(SAVE_PATH, loggedInName + "*").Length;
             folderName = loggedInName + " (" + count + ")";
         }
-        Directory.CreateDirectory(SAVE_PATH + "/" + folderName);
+        Directory.CreateDirectory(Path.Combine(SAVE_PATH, folderName));
         profileInfo = new Dictionary<string, string>();
         profileInfo.Add("personID", "..."); //todo: change this to the actual personID
         profileInfo.Add("count", "0");
         ExportProfileInfo();
     }
 
-
+    //TODO: maybe change this to use Object serialization... lol
     private void ExportProfileInfo()
     {
-        string savePath = SAVE_PATH + "/" + folderName + "/" + "info.txt";
+        string savePath = Path.Combine(SAVE_PATH, folderName, "info.txt");
         List<string> dataToSave = new List<string>();
         dataToSave.Add("{");
         for (int i = 0; i < profileInfo.Keys.Count; i++)
@@ -252,16 +252,15 @@ public class GameController : MonoBehaviour {
 
         Dictionary<Tuple<string, string>, string> images = new Dictionary<Tuple<string, string>, string>();
 
-        string path = SAVE_PATH + "/" + folderName;
+        string path = Path.Combine(SAVE_PATH, folderName);
         string[] dirs = Directory.GetFiles(path, "*.png");
         int count = 0;
         foreach (string img in dirs)
         {
-            string[] splitName = img.Split('/');
-            string fullImgName = splitName[splitName.Length - 1];
-            string displayName = "Photo " + count;
+            string fullImgName = Path.GetFileName(img);
+            string displayName = "Photo " + (count + 1);
 
-            string identifier = folderName + "/" + fullImgName;
+            string identifier = Path.Combine(folderName, fullImgName);
 
             Tuple<string, string> data = new Tuple<string, string>(displayName, identifier);
             images.Add(data, img);
@@ -288,7 +287,7 @@ public class GameController : MonoBehaviour {
         }
 
         int count = Int32.Parse(profileInfo["count"]);
-        System.IO.File.WriteAllBytes(SAVE_PATH + "/" + folderName + "/" + "Image " + count + ".png", tex.EncodeToPNG());
+        System.IO.File.WriteAllBytes(Path.Combine(SAVE_PATH, folderName, "Image " + count + ".png"), tex.EncodeToPNG());
         profileInfo["count"] = (count + 1).ToString();
         profileInfo["Image " + count] = persistedId;
         ExportProfileInfo();
@@ -329,7 +328,7 @@ public class GameController : MonoBehaviour {
     {
         string dir;
 
-        string[] profileImgDirs = Directory.GetFiles(SAVE_PATH + "/" + fName, "*.png");
+        string[] profileImgDirs = Directory.GetFiles(Path.Combine(SAVE_PATH, fName), "*.png");
         if (profileImgDirs.Length < 1)
         {
             dir = "(" + unknown + ") " + GameController.UNKNOWN_IMG;
@@ -377,7 +376,7 @@ public class GameController : MonoBehaviour {
 
     private void LoadDataFile()
     {
-        profileInfo = ReadJsonDictFromFile(SAVE_PATH + "/" + folderName + "/info.txt");
+        profileInfo = ReadJsonDictFromFile(Path.Combine(SAVE_PATH, folderName, "info.txt"));
     }
 
     private Dictionary<string, string> ReadJsonDictFromFile(string path)
@@ -389,16 +388,15 @@ public class GameController : MonoBehaviour {
 
     public void SelectPhoto(string identifier)
     {
-        savedFrame = ImgDirToSprite(SAVE_PATH + "/" + identifier);
+        savedFrame = ImgDirToSprite(Path.Combine(SAVE_PATH, identifier));
         savedFrameDir = identifier;
         ChangeState("photoSelected");
     }
 
     private async Task DeleteSelectedPhoto()
     {
-        string fileName = savedFrameDir.Split('/')[1];
-        string withoutExt = fileName.Split('.')[0];
-        string persistedId = profileInfo[withoutExt];
+        string fileName = Path.GetFileNameWithoutExtension(savedFrameDir);
+        string persistedId = profileInfo[fileName];
 
         UIPromptNoButtonPopUp("Hold on, I'm thinking... (deleting Face from LargePersonGroup Person)");
 
@@ -406,9 +404,9 @@ public class GameController : MonoBehaviour {
 
         if (deleted)
         {
-            profileInfo[withoutExt] = "deleted";
+            profileInfo[fileName] = "deleted";
             ExportProfileInfo();
-            File.Delete(SAVE_PATH + "/" + savedFrameDir);
+            File.Delete(Path.Combine(SAVE_PATH, savedFrameDir));
             await RetrainProfilesAsync();
         }
         else
@@ -448,9 +446,7 @@ public class GameController : MonoBehaviour {
         Sprite frame = adjuster.GrabCurrentWebcamFrame();
         UIPromptNoButtonPopUp("Hold on, I'm thinking... (identifying faces in current frame)");
         byte[] frameData = frame.texture.EncodeToPNG();
-        //string rsp = await apiHelper.IdentifyBiggestInImageAsync(frameData);
-        //Debug.Log("rsp for verify: " + rsp);
-        //return false;
+
         Dictionary<string, decimal> guesses = await apiHelper.IdentifyBiggestInImageAsync(frameData);
 
         if (guesses == null)
@@ -461,7 +457,7 @@ public class GameController : MonoBehaviour {
         }
 
         bool verified = AuthenticateLogin(guesses);
-        if (verified)  //identified and below confidence threshold
+        if (verified)  //identified and above confidence threshold
         {
             return true;
         }
@@ -768,11 +764,12 @@ public class GameController : MonoBehaviour {
 
     private static string DetermineSavePath()
     {
-        string ret = Directory.GetCurrentDirectory() + "/ProfileData";
+        string ret = Path.Combine(Directory.GetCurrentDirectory(), "ProfileData");
 
         #if UNITY_ANDROID
         Debug.Log("Unity Android Detected");
-        ret = "/sdcard/PersonalRobotsGroup.FaceIDApp/ProfileData";
+        ret = Path.Combine("sdcard", "PersonalRobotsGroup.FaceIDApp", "ProfileData");
+        //ret = "/sdcard/PersonalRobotsGroup.FaceIDApp/ProfileData";
         #endif
 
         return ret;
