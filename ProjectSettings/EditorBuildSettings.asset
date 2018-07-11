@@ -8,4 +8,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Scenes/Game.unity
     guid: d0f8c4b74604e479e933198ebf0252ac
+  - enabled: 1
+    path: Assets/_Scenes/ROS Connection.unity
+    guid: c34f46fdf46c44f28b914c831d6a3a54
   m_configObjects: {}

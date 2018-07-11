@@ -7,6 +7,9 @@ using UnityFaceIDHelper;
 
 public class UIAdjuster : MonoBehaviour {
 
+    // The singleton instance.
+    public static UIAdjuster instance = null;
+
     public Canvas questionPopUp;
     public Text questionText;
 
@@ -51,8 +54,23 @@ public class UIAdjuster : MonoBehaviour {
 
     private WebcamController webcamController;
 
-	// Use this for initialization
-	void Start () {
+    void Awake()
+    {
+        // Enforce singleton pattern.
+        if (instance == null)
+        {
+            instance = this;
+        }
+        else if (instance != this)
+        {
+            Debug.Log("duplicate UIElementContainer, destroying");
+            Destroy(gameObject);
+        }
+        DontDestroyOnLoad(gameObject);
+    }
+
+    // Use this for initialization
+    void Start () {
         questionPopUpGrp = questionPopUp.GetComponent<CanvasGroup>();
         textInputGrp = textInput.GetComponent<CanvasGroup>();
         okPopUpGrp = okPopUp.GetComponent<CanvasGroup>();
@@ -183,13 +201,19 @@ public class UIAdjuster : MonoBehaviour {
         profileListGrp.alpha = 0;
         profileListGrp.interactable = false;
         profileListWindow.gameObject.SetActive(false);
+
+        ScrollableList list = profileList.GetComponent<ScrollableList>();
+        list.SetItemActives(false);
     }
 
-    public void ShowProfileList()
+    public void ShowProfileList(bool showProfiles)
     {
         profileListGrp.alpha = 1;
         profileListGrp.interactable = true;
         profileListWindow.gameObject.SetActive(true);
+
+        ScrollableList list = profileList.GetComponent<ScrollableList>();
+        list.SetItemActives(showProfiles);
     }
 
     public void SetProfileListText(string s)
@@ -210,13 +234,19 @@ public class UIAdjuster : MonoBehaviour {
         imageListGrp.alpha = 0;
         imageListGrp.interactable = false;
         imageListWindow.gameObject.SetActive(false);
+
+        ScrollableList list = imageList.GetComponent<ScrollableList>();
+        list.SetItemActives(false);
     }
 
-    public void ShowImageList()
+    public void ShowImageList(bool showImages)
     {
         imageListGrp.alpha = 1;
         imageListGrp.interactable = true;
         imageListWindow.gameObject.SetActive(true);
+
+        ScrollableList list = imageList.GetComponent<ScrollableList>();
+        list.SetItemActives(showImages);
     }
 
     public void SetImageListText(string s)
@@ -284,5 +314,18 @@ public class UIAdjuster : MonoBehaviour {
     public void SetCancelButtonText(string changed)
     {
         cancelText.text = changed;
+    }
+
+    public void HideAllElements()
+    {
+        this.HideOKPopUp();
+        this.HideImageList();
+        this.HideTextInput();
+        this.HideCameraFeed();
+        this.HideProfileList();
+        this.HideUpdateImage();
+        this.HideNoButtonPopUp();
+        this.HideQuestionPopUp();
+        this.HideUpdateCancelPopUp();
     }
 }

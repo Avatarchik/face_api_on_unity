@@ -9,7 +9,7 @@
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <RootNamespace></RootNamespace>
-    <ProjectGuid>{7D7168B5-22A8-FA62-0576-4E6A49CB8525}</ProjectGuid>
+    <ProjectGuid>{C6454F64-49DF-F03F-B7EB-17A348703949}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <AssemblyName>Assembly-CSharp</AssemblyName>
@@ -60,18 +60,23 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets\Scripts\ButtonController.cs" />
-    <Compile Include="Assets\Scripts\GameController.cs" />
-    <Compile Include="Assets\Scripts\ProfileHandler.cs" />
-    <Compile Include="Assets\Scripts\ScrollableList.cs" />
-    <Compile Include="Assets\Scripts\UIAdjuster.cs" />
-    <Compile Include="Assets\Scripts\WebcamController.cs" />
+    <Compile Include="Assets\Scripts\ConnectionScreenController.cs" />
+    <Compile Include="Assets\Scripts\Game Scripts\ButtonController.cs" />
+    <Compile Include="Assets\Scripts\Game Scripts\GameController.cs" />
+    <Compile Include="Assets\Scripts\Game Scripts\ProfileHandler.cs" />
+    <Compile Include="Assets\Scripts\Game Scripts\ScrollableList.cs" />
+    <Compile Include="Assets\Scripts\Game Scripts\UIAdjuster.cs" />
+    <Compile Include="Assets\Scripts\Game Scripts\WebcamController.cs" />
+    <Compile Include="Assets\Scripts\Ros\RosbridgeUtilities.cs" />
+    <Compile Include="Assets\Scripts\Ros\RosbridgeWebSocketClient.cs" />
+    <Compile Include="Assets\Scripts\Ros\RosManager.cs" />
+    <Compile Include="Assets\Scripts\Ros\RosStorybookMessages.cs" />
     <None Include="Assets\Resources\api_access_key.txt" />
     <Reference Include="UnityEditor.StandardEvents">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>
     </Reference>
     <Reference Include="Unity.PackageManagerUI.Editor">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Library/ScriptAssemblies/Unity.PackageManagerUI.Editor.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Library/ScriptAssemblies/Unity.PackageManagerUI.Editor.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AIModule">
       <HintPath>/Applications/Unity/Unity.app/Contents/Managed/UnityEngine/UnityEngine.AIModule.dll</HintPath>
@@ -269,10 +274,19 @@
       <HintPath>/Applications/Unity/Unity.app/Contents/UnityExtensions/Unity/UnitySpatialTracking/RuntimeEditor/UnityEngine.SpatialTracking.dll</HintPath>
     </Reference>
     <Reference Include="UnityFaceIDHelper">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Assets/Plugins/UnityFaceIDHelper.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/UnityFaceIDHelper.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Assets/Plugins/Newtonsoft.Json.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="websocket-sharp">
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/ROS Helpers/websocket-sharp.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityFaceIDHelper">
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/Face API/UnityFaceIDHelper.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/Face API/Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.Analytics">
       <HintPath>/Users/yaseen/Library/Unity/cache/packages/packages.unity.com/com.unity.analytics@2.0.16/UnityEngine.Analytics.dll</HintPath>
@@ -622,6 +636,12 @@
     <Reference Include="Boo.Lang">
       <HintPath>/Applications/Unity/Unity.app/Contents/MonoBleedingEdge/lib/mono/unityscript/Boo.Lang.dll</HintPath>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Assembly-CSharp-firstpass.csproj">
+      <Project>{C7391136-5B82-2166-65C5-CB6BB5734FB4}</Project>
+      <Name>Assembly-CSharp-firstpass</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="GenerateTargetFrameworkMonikerAttribute" />

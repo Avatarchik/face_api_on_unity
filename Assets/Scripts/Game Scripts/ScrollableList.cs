@@ -13,6 +13,17 @@ public class ScrollableList : MonoBehaviour
 
     private Dictionary<string, GameObject> listedItems;
 
+    public void SetItemActives(bool active)
+    {
+        if (listedItems != null)
+        {
+            foreach (KeyValuePair<string, GameObject> entry in listedItems)
+            {
+                entry.Value.gameObject.SetActive(active);
+            }
+        }
+    }
+
     public void LoadProfiles(Dictionary<Tuple<string, string>, string> profiles, int columns = 0)
     {
         LoadObjects("Profile", profiles, columns);

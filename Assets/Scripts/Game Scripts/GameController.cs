@@ -6,12 +6,15 @@ using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityFaceIDHelper;
 
 public class GameController : MonoBehaviour {
-
+    
     // The singleton instance.
     public static GameController instance = null;
+
+    public Canvas uiElementContainer;
 
     private string currentState;
     private bool shouldUpdate;
@@ -51,11 +54,11 @@ public class GameController : MonoBehaviour {
     // Use this for initialization
     void Start()
     {
-        adjuster = GetComponent<UIAdjuster>();
+        adjuster = uiElementContainer.gameObject.GetComponent<UIAdjuster>();
         TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
         apiHelper = new FaceAPIHelper(api_access_key.text, PERSON_GROUP_ID);
 
-        currentState = "started";
+        currentState = "ros_connection";
         shouldUpdate = true;
 
         if (!Directory.Exists(SAVE_PATH))
@@ -72,6 +75,11 @@ public class GameController : MonoBehaviour {
             shouldUpdate = false;
             switch (currentState)
             {
+                case "ros_connection":
+                    ClearQueuedData(); // there shouldn't be any, but just in case...
+                    adjuster.HideAllElements();
+                    SceneManager.LoadScene("ROS Connection", LoadSceneMode.Single);
+                    break;
                 case "started":
                     //TODO: clear any queue'd data (like user id) before prompting question
                     ClearQueuedData();
@@ -326,11 +334,9 @@ public class GameController : MonoBehaviour {
         {
             Dictionary<Tuple<string, string>, string> profiles = new Dictionary<Tuple<string, string>, string>();
             string[] profileDirs = Directory.GetDirectories(SAVE_PATH);
-            Debug.Log("number of profile directories: " + profileDirs.Length);
             int unknownCount = 0;
             foreach (string p in profileDirs)
             {
-                Debug.Log("Here's a profile dir: " + p);
                 string fName = Path.GetFileName(p);
                 string pName = FolderNameToLoginName(fName);
 
@@ -568,17 +574,9 @@ public class GameController : MonoBehaviour {
     private void UIAskQuestion(string q)
     {
         //hide everything not in use
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideTextInput();
-        adjuster.HideOKPopUp();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideImageList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideQuestionPopUp();
+        //change values
         adjuster.SetQuestionPopUpText(q);
 
         //show the window after changes are made
@@ -588,17 +586,9 @@ public class GameController : MonoBehaviour {
     private void UIPromptInputText(string prompt)
     {
         //hide everything not in use
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideOKPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideImageList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideTextInput();
+        //change values
         adjuster.SetTextInputPrompt(prompt);
 
         //show the window after changes are made
@@ -608,17 +598,9 @@ public class GameController : MonoBehaviour {
     private void UIPromptOKDialogue(string prompt)
     {
         //hide everything not in use
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideTextInput();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideImageList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideOKPopUp();
+        //change values
         adjuster.SetOKPopUpText(prompt);
 
         //show the window after changes are made
@@ -628,59 +610,35 @@ public class GameController : MonoBehaviour {
     private void UIListProfiles(string prompt, Dictionary<Tuple<string, string>, string> profiles)
     {
         //hide everything not in use
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideTextInput();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideOKPopUp();
-        adjuster.HideImageList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideProfileList();
+        //change values
         adjuster.SetProfileListText(prompt);
         adjuster.UpdateProfileList(profiles);
 
         //show the window after changes are made
-        adjuster.ShowProfileList();
+        adjuster.ShowProfileList(true);
     }
 
     private void UIListImages(string prompt, Dictionary<Tuple<string, string>, string> profiles)
     {
         //hide everything not in use
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideTextInput();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideOKPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideImageList();
+        //change values
         adjuster.SetImageListText(prompt);
         adjuster.UpdateImageList(profiles);
 
         //show the window after changes are made
-        adjuster.ShowImageList();
+        adjuster.ShowImageList(true);
     }
 
     private void UIShowWebcam(string prompt, string updateText = "Update", string cancelText = "Cancel")
     {
         //hide everything not in use
-        adjuster.HideTextInput();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideOKPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideImageList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
+        //change values
         adjuster.SetUpdateCancelPopUpText(prompt);
         adjuster.SetUpdateButtonText(updateText);
         adjuster.SetCancelButtonText(cancelText);
@@ -693,17 +651,9 @@ public class GameController : MonoBehaviour {
     private void UIPicWindow(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel")
     {
         //hide everything not in use
-        adjuster.HideTextInput();
-        adjuster.HideNoButtonPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideOKPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideImageList();
-        adjuster.HideCameraFeed();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideUpdateImage();
+        //change values
         adjuster.SetUpdateCancelPopUpText(prompt);
         adjuster.SetUpdateButtonText(updateText);
         adjuster.SetCancelButtonText(cancelText);
@@ -717,17 +667,9 @@ public class GameController : MonoBehaviour {
     private void UIPromptNoButtonPopUp(string prompt)
     {
         //hide everything not in use
-        adjuster.HideCameraFeed();
-        adjuster.HideUpdateCancelPopUp();
-        adjuster.HideTextInput();
-        adjuster.HideOKPopUp();
-        adjuster.HideQuestionPopUp();
-        adjuster.HideProfileList();
-        adjuster.HideImageList();
-        adjuster.HideUpdateImage();
+        adjuster.HideAllElements();
 
-        //hide window while values are being changed
-        adjuster.HideNoButtonPopUp();
+        //change values
         adjuster.SetNoButtonPopUpText(prompt);
 
         //show the window after changes are made

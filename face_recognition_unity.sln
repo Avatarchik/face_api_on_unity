@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio for Mac
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "face_recognition_unity", "Assembly-CSharp.csproj", "{C6454F64-49DF-F03F-B7EB-17A348703949}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "face_recognition_unity", "Assembly-CSharp-firstpass.csproj", "{C7391136-5B82-2166-65C5-CB6BB5734FB4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C6454F64-49DF-F03F-B7EB-17A348703949}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C6454F64-49DF-F03F-B7EB-17A348703949}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6454F64-49DF-F03F-B7EB-17A348703949}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C6454F64-49DF-F03F-B7EB-17A348703949}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7391136-5B82-2166-65C5-CB6BB5734FB4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7391136-5B82-2166-65C5-CB6BB5734FB4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7391136-5B82-2166-65C5-CB6BB5734FB4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7391136-5B82-2166-65C5-CB6BB5734FB4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
