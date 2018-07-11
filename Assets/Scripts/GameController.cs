@@ -10,9 +10,6 @@ using UnityFaceIDHelper;
 
 public class GameController : MonoBehaviour {
 
-    // The singleton instance.
-    public static GameController instance = null;
-
     private string currentState;
     private bool shouldUpdate;
 
@@ -33,23 +30,8 @@ public class GameController : MonoBehaviour {
     const decimal CONFIDENCE_THRESHOLD = 0.70m;    // decimal between 0 and 1
     const int CAM_DELAY_MS = 2000;
 
-    void Awake()
-    {
-        // Enforce singleton pattern.
-        if (instance == null)
-        {
-            instance = this;
-        }
-        else if (instance != this)
-        {
-            Debug.Log("duplicate GameController, destroying");
-            Destroy(gameObject);
-        }
-        DontDestroyOnLoad(instance);
-    }
-
-    // Use this for initialization
-    void Start()
+	// Use this for initialization
+	void Start()
     {
         adjuster = GetComponent<UIAdjuster>();
         TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
