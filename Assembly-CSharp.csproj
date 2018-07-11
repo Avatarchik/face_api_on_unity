@@ -9,7 +9,7 @@
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <RootNamespace></RootNamespace>
-    <ProjectGuid>{7D7168B5-22A8-FA62-0576-4E6A49CB8525}</ProjectGuid>
+    <ProjectGuid>{C6454F64-49DF-F03F-B7EB-17A348703949}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <AssemblyName>Assembly-CSharp</AssemblyName>
@@ -68,10 +68,10 @@
     <Compile Include="Assets\Scripts\WebcamController.cs" />
     <None Include="Assets\Resources\api_access_key.txt" />
     <Reference Include="UnityEditor.StandardEvents">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>
     </Reference>
     <Reference Include="Unity.PackageManagerUI.Editor">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Library/ScriptAssemblies/Unity.PackageManagerUI.Editor.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Library/ScriptAssemblies/Unity.PackageManagerUI.Editor.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AIModule">
       <HintPath>/Applications/Unity/Unity.app/Contents/Managed/UnityEngine/UnityEngine.AIModule.dll</HintPath>
@@ -269,10 +269,10 @@
       <HintPath>/Applications/Unity/Unity.app/Contents/UnityExtensions/Unity/UnitySpatialTracking/RuntimeEditor/UnityEngine.SpatialTracking.dll</HintPath>
     </Reference>
     <Reference Include="UnityFaceIDHelper">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Assets/Plugins/UnityFaceIDHelper.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/UnityFaceIDHelper.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>/Users/yaseen/Documents/Unity Games/Face ID Game/Assets/Plugins/Newtonsoft.Json.dll</HintPath>
+      <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Assets/Plugins/Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.Analytics">
       <HintPath>/Users/yaseen/Library/Unity/cache/packages/packages.unity.com/com.unity.analytics@2.0.16/UnityEngine.Analytics.dll</HintPath>
