@@ -86,42 +86,42 @@ public class UIAdjuster : MonoBehaviour {
 
     // Modifiers for the Yes/No window:
 
-    public void HideQuestionPopUp()
+    private void HideQuestionPopUp()
     {
         questionPopUpGrp.alpha = 0;
         questionPopUpGrp.interactable = false;
         questionPopUp.gameObject.SetActive(false);
     }
 
-    public void ShowQuestionPopUp()
+    private void ShowQuestionPopUp()
     {
         questionPopUpGrp.alpha = 1;
         questionPopUpGrp.interactable = true;
         questionPopUp.gameObject.SetActive(true);
     }
 
-    public void SetQuestionPopUpText(string s)
+    private void SetQuestionPopUpText(string s)
     {
         questionText.text = s;
     }
 
     // Modifiers for the Text input window:
 
-    public void HideTextInput()
+    private void HideTextInput()
     {
         textInputGrp.alpha = 0;
         textInputGrp.interactable = false;
         textInput.gameObject.SetActive(false);
     }
 
-    public void ShowTextInput()
+    private void ShowTextInput()
     {
         textInputGrp.alpha = 1;
         textInputGrp.interactable = true;
         textInput.gameObject.SetActive(true);
     }
 
-    public void SetTextInputPrompt(string s)
+    private void SetTextInputPrompt(string s)
     {
         textInputPrompt.text = s;
     }
@@ -133,70 +133,70 @@ public class UIAdjuster : MonoBehaviour {
 
     // Modifiers for the OK Button Dialogue window:
 
-    public void HideOKPopUp()
+    private void HideOKPopUp()
     {
         okPopUpGrp.alpha = 0;
         okPopUpGrp.interactable = false;
         okPopUp.gameObject.SetActive(false);
     }
 
-    public void ShowOKPopUp()
+    private void ShowOKPopUp()
     {
         okPopUpGrp.alpha = 1;
         okPopUpGrp.interactable = true;
         okPopUp.gameObject.SetActive(true);
     }
 
-    public void SetOKPopUpText(string s)
+    private void SetOKPopUpText(string s)
     {
         okDialogueText.text = s;
     }
 
     // Modifiers for the no-button Dialogue window:
 
-    public void HideNoButtonPopUp()
+    private void HideNoButtonPopUp()
     {
         noButtonPopUpGrp.alpha = 0;
         noButtonPopUpGrp.interactable = false;
         noButtonPopUp.gameObject.SetActive(false);
     }
 
-    public void ShowNoButtonPopUp()
+    private void ShowNoButtonPopUp()
     {
         noButtonPopUpGrp.alpha = 1;
         noButtonPopUpGrp.interactable = true;
         noButtonPopUp.gameObject.SetActive(true);
     }
 
-    public void SetNoButtonPopUpText(string s)
+    private void SetNoButtonPopUpText(string s)
     {
         noButtonText.text = s;
     }
 
     // Modifiers for the Webcam/Image window:
 
-    public void HideUpdateCancelPopUp()
+    private void HideUpdateCancelPopUp()
     {
         updateCancelPopUpGrp.alpha = 0;
         updateCancelPopUpGrp.interactable = false;
         updateCancelPopUp.gameObject.SetActive(false);
     }
 
-    public void ShowUpdateCancelButtonPopUp()
+    private void ShowUpdateCancelButtonPopUp()
     {
         updateCancelPopUpGrp.alpha = 1;
         updateCancelPopUpGrp.interactable = true;
         updateCancelPopUp.gameObject.SetActive(true);
     }
 
-    public void SetUpdateCancelPopUpText(string s)
+    private void SetUpdateCancelPopUpText(string s)
     {
         updateCancelText.text = s;
     }
 
     // Modifiers for the Profile List window:
 
-    public void HideProfileList()
+    private void HideProfileList()
     {
         profileListGrp.alpha = 0;
         profileListGrp.interactable = false;
@@ -206,7 +206,7 @@ public class UIAdjuster : MonoBehaviour {
         list.SetItemActives(false);
     }
 
-    public void ShowProfileList(bool showProfiles)
+    private void ShowProfileList(bool showProfiles)
     {
         profileListGrp.alpha = 1;
         profileListGrp.interactable = true;
@@ -216,12 +216,12 @@ public class UIAdjuster : MonoBehaviour {
         list.SetItemActives(showProfiles);
     }
 
-    public void SetProfileListText(string s)
+    private void SetProfileListText(string s)
     {
         profileListText.text = s;
     }
 
-    public void UpdateProfileList(Dictionary<Tuple<string, string>, string> profiles)
+    private void UpdateProfileList(Dictionary<Tuple<string, string>, string> profiles)
     {
         ScrollableList list = profileList.GetComponent<ScrollableList>();
         list.LoadProfiles(profiles);
@@ -229,7 +229,7 @@ public class UIAdjuster : MonoBehaviour {
 
     // Modifiers for the Image List window:
 
-    public void HideImageList()
+    private void HideImageList()
     {
         imageListGrp.alpha = 0;
         imageListGrp.interactable = false;
@@ -239,7 +239,7 @@ public class UIAdjuster : MonoBehaviour {
         list.SetItemActives(false);
     }
 
-    public void ShowImageList(bool showImages)
+    private void ShowImageList(bool showImages)
     {
         imageListGrp.alpha = 1;
         imageListGrp.interactable = true;
@@ -249,26 +249,26 @@ public class UIAdjuster : MonoBehaviour {
         list.SetItemActives(showImages);
     }
 
-    public void SetImageListText(string s)
+    private void SetImageListText(string s)
     {
         imageListText.text = s;
     }
 
-    public void UpdateImageList(Dictionary<Tuple<string, string>, string> profiles)
+    private void UpdateImageList(Dictionary<Tuple<string, string>, string> profiles)
     {
         ScrollableList list = imageList.GetComponent<ScrollableList>();
         list.LoadImages(profiles);
     }
     
     // Will need to turn off feed before hiding it
-    public void HideCameraFeed()
+    private void HideCameraFeed()
     {
         cameraFeedGrp.alpha = 0;
         webcamController.DisableCamera();
     }
 
     // Will need to turn on feed before showing it
-    public void ShowCameraFeed()
+    private void ShowCameraFeed()
     {
         cameraFeedGrp.alpha = 1;
         webcamController.EnableCamera();
@@ -284,19 +284,19 @@ public class UIAdjuster : MonoBehaviour {
         webcamController.DisableCamera();
     }
 
-    public void HideUpdateImage()
+    private void HideUpdateImage()
     {
         updateImgGrp.alpha = 0;
         updateBoxImg.gameObject.SetActive(false);
     }
 
-    public void ShowUpdateImage()
+    private void ShowUpdateImage()
     {
         updateImgGrp.alpha = 1;
         updateBoxImg.gameObject.SetActive(true);
     }
 
-    public void ChangeUpdateImage(Sprite newImg)
+    private void ChangeUpdateImage(Sprite newImg)
     {
         updateBoxImg.sprite = newImg;
     }
@@ -306,12 +306,12 @@ public class UIAdjuster : MonoBehaviour {
         return webcamController.GetFrame();
     }
 
-    public void SetUpdateButtonText(string changed)
+    private void SetUpdateButtonText(string changed)
     {
         updateText.text = changed;
     }
 
-    public void SetCancelButtonText(string changed)
+    private void SetCancelButtonText(string changed)
     {
         cancelText.text = changed;
     }
@@ -327,5 +327,110 @@ public class UIAdjuster : MonoBehaviour {
         this.HideNoButtonPopUp();
         this.HideQuestionPopUp();
         this.HideUpdateCancelPopUp();
+    }
+
+    public void AskQuestion(string q)
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetQuestionPopUpText(q);
+
+        //show the window after changes are made
+        this.ShowQuestionPopUp();
+    }
+
+    public void PromptInputText(string prompt)
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetTextInputPrompt(prompt);
+
+        //show the window after changes are made
+        this.ShowTextInput();
+    }
+
+    public void PromptOKDialogue(string prompt)
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetOKPopUpText(prompt);
+
+        //show the window after changes are made
+        this.ShowOKPopUp();
+    }
+
+    public void ListProfiles(string prompt, Dictionary<Tuple<string, string>, string> profiles)
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetProfileListText(prompt);
+        this.UpdateProfileList(profiles);
+
+        //show the window after changes are made
+        this.ShowProfileList(true);
+    }
+
+    public void ListImages(string prompt, Dictionary<Tuple<string, string>, string> profiles)
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetImageListText(prompt);
+        this.UpdateImageList(profiles);
+
+        //show the window after changes are made
+        this.ShowImageList(true);
+    }
+
+    public void ShowWebcam(string prompt, string updateText = "Update", string cancelText = "Cancel")
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetUpdateCancelPopUpText(prompt);
+        this.SetUpdateButtonText(updateText);
+        this.SetCancelButtonText(cancelText);
+
+        //show the window after changes are made
+        this.ShowUpdateCancelButtonPopUp();
+        this.ShowCameraFeed();
+    }
+
+    public void PicWindow(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel")
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetUpdateCancelPopUpText(prompt);
+        this.SetUpdateButtonText(updateText);
+        this.SetCancelButtonText(cancelText);
+        this.ChangeUpdateImage(pic);
+
+        //show the window after changes are made
+        this.ShowUpdateCancelButtonPopUp();
+        this.ShowUpdateImage();
+    }
+
+    public void PromptNoButtonPopUp(string prompt)
+    {
+        //hide everything not in use
+        this.HideAllElements();
+
+        //change values
+        this.SetNoButtonPopUpText(prompt);
+
+        //show the window after changes are made
+        this.ShowNoButtonPopUp();
     }
 }

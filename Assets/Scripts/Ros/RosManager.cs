@@ -10,16 +10,16 @@ using System.Collections.Generic;
 using MiniJSON;
 
 public class RosManager {
-    /*
+    
     private GameController gameController; // Keep a reference to the game controller.
     private RosbridgeWebSocketClient rosClient;
     // TODO: note that for now only one handler can be registered per command.
-    private Dictionary<StorybookCommand, Action<Dictionary<string, object>>> commandHandlers;
+    private Dictionary<FaceIDCommand, Action<Dictionary<string, object>>> commandHandlers;
     private bool connected;
 
     System.Timers.Timer publishStateTimer =
         new System.Timers.Timer(Constants.STORYBOOK_STATE_PUBLISH_DELAY_MS);
-
+    /*
     // Constructor.
     public RosManager(string rosIP, string portNum, GameController gameController) {
         Logger.Log("RosManager constructor");

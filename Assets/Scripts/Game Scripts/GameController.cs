@@ -14,10 +14,13 @@ public class GameController : MonoBehaviour {
     // The singleton instance.
     public static GameController instance = null;
 
+    private Queue<Task> taskQueue = new Queue<Task>();
+
+    private RosManager rosManager;
+
     public Canvas uiElementContainer;
 
-    private string currentState;
-    private bool shouldUpdate;
+    private GameState currentState;
 
     private UIAdjuster adjuster;
 
@@ -28,13 +31,6 @@ public class GameController : MonoBehaviour {
     private Sprite savedFrame;
     private string savedFrameDir;
     private FaceAPIHelper apiHelper;
-
-    public static readonly string SAVE_PATH = DetermineSavePath();
-    public static readonly string UNKNOWN_IMG = Path.Combine("Stock Images", "unknown");
-    public static readonly string SADFACE_IMG = Path.Combine("Stock Images", "sad");
-    const string PERSON_GROUP_ID = "unity";
-    const decimal CONFIDENCE_THRESHOLD = 0.70m;    // decimal between 0 and 1
-    const int CAM_DELAY_MS = 2000;
 
     void Awake()
     {
@@ -56,203 +52,320 @@ public class GameController : MonoBehaviour {
     {
         adjuster = uiElementContainer.gameObject.GetComponent<UIAdjuster>();
         TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
-        apiHelper = new FaceAPIHelper(api_access_key.text, PERSON_GROUP_ID);
+        apiHelper = new FaceAPIHelper(api_access_key.text, Constants.PERSON_GROUP_ID);
 
-        currentState = "ros_connection";
-        shouldUpdate = true;
+        SetState(GameState.GAMECONTROLLER_STARTING);
 
-        if (!Directory.Exists(SAVE_PATH))
+        AddTask(GameState.ROS_CONNECTION);
+
+        if (!Directory.Exists(Constants.SAVE_PATH))
         {
-            Directory.CreateDirectory(SAVE_PATH);
+            Directory.CreateDirectory(Constants.SAVE_PATH);
         }
 	}
 	
 	// Update is called once per frame
 	async void Update()
     {
-        if (shouldUpdate)
+        //Debug.Log("Current gameState: " + this.GetGameState());
+        await HandleTaskQueue();
+	}
+
+    // Handle main task queue.
+    private async Task HandleTaskQueue()
+    {
+        // Pop tasks from the task queue and perform them.
+        // Tasks are added from other threads, usually in response to ROS msgs.
+        if (this.taskQueue.Count > 0)
         {
-            shouldUpdate = false;
-            switch (currentState)
+            try
             {
-                case "ros_connection":
-                    ClearQueuedData(); // there shouldn't be any, but just in case...
-                    adjuster.HideAllElements();
-                    SceneManager.LoadScene("ROS Connection", LoadSceneMode.Single);
-                    break;
-                case "started":
-                    //TODO: clear any queue'd data (like user id) before prompting question
-                    ClearQueuedData();
-                    UIAskQuestion("\r\nHi! Are you new here?");
-                    break;
-                case "newPrompt":
-                    UIAskQuestion("\r\nWould you like to make a profile?");
-                    break;
-                case "mustLogin":
-                    UIPromptOKDialogue("\r\nIn order to use the app, you must be logged into a profile.");
-                    break;
-                case "profileName":
-                    UIPromptInputText("What is your name?\r\n\r\nPlease ensure that the name you enter is valid.");
-                    break;
-                case "afterNameTyped":
-                    string entered = adjuster.GetTypedInput().ToLower();
-                    if (IsInvalidName(entered))  // conditions for an invalid name
-                        ChangeState("profileName");
-                    else
-                    {
-                        UIPromptNoButtonPopUp("Hold on, I'm thinking... (creating LargePersonGroup Person)");
-                        string personID = await apiHelper.CreatePersonAsync(entered);
-                        if (personID != "") //successful API call
-                        {
-                            loggedInName = entered;
-                            folderName = entered;
-                            CreateProfile();
-                            SetPersonID(personID);
-                            ChangeState("loggedIn");
-                        }
-                        else
-                        { // maybe internet is down, maybe api access is revoked...
-                            ChangeState("apiErrorCreate");
-                            Debug.LogError("API Error occurred while trying to create a LargePersonGroup Person");
-                        }
-                    }
-                    break;
-                case "listFaceImages":
-                    Dictionary<Tuple<string, string>, string> imageList = LoadImages();
-                    UIListImages("Here is your photo listing:", imageList);
-                    break;
-                case "addingImgWebcam":
-                    if (!ShouldBeAuthenticated())   //if they don't need to be authenticated
-                        UIShowWebcam("Take a picture!", "Snap!");
-                    else
-                    {
-                        if (await VerifyAsync(true))    //if they pass authentification
-                            UIShowWebcam("Take a picture!", "Snap!");
-                    }
-                    break;
-                case "addingImgCheckPic":
-                    Sprite frame = adjuster.GrabCurrentWebcamFrame();
-                    UIPromptNoButtonPopUp("Hold on, I'm thinking... (counting faces in image)");
-                    byte[] imgData = frame.texture.EncodeToPNG();
-
-                    int numFaces = await apiHelper.CountFacesAsync(imgData);
-                    if (numFaces == -1)
-                    {
-                        ChangeState("apiErrorCountingFaces");
-                        Debug.LogError("API Error occurred while trying to count the faces in a frame");
-                        return;
-                    }
-
-                    if (numFaces < 1)   //pic has no detectable faces in it... try again.
-                        ChangeState("addingImgTryAgain");
-                    else
-                    {
-                        if (!ShouldBeAuthenticated())
-                        {
-                            savedFrame = frame;
-                            ChangeState("addingImgShowPic");
-                        }
-                        else
-                        {
-                            if (await VerifyAsync(true, frame))    //if they pass authentification
-                            {
-                                savedFrame = frame;
-                                ChangeState("addingImgShowPic");
-                            }
-                        }
-                    }
-                    break;
-                case "addingImgTryAgain":
-                    UIPicWindow(savedFrame, "I didn't like this picture :( Can we try again?", "Try again...", "Cancel");
-                    break;
-                case "addingImgShowPic":
-                    UIPicWindow(savedFrame, "I like it! What do you think?", "Keep it!", "Try again...");
-                    break;
-                case "addingImgSaving":
-                    await AddImgToProfile();
-                    ChangeState("listFaceImages");
-                    break;
-                case "listProfiles":
-                    Dictionary<Tuple<string, string>, string> profiles = LoadProfiles();
-                    UIListProfiles("Here are the existing profiles:", profiles);
-                    break;
-                case "loginAreYouSure":
-                    Sprite pic = ImgDirToSprite(GetProfilePicDir(loggedInName));
-                    string displayName = FolderNameToLoginName(loggedInName);
-                    UIPicWindow(pic, "Are you sure you want to log in as " + displayName + "?", "Login", "Back"); 
-                    break;
-                case "loggingIn":
-                    LoadProfileData(loggedInName);
-                    if (!ShouldBeAuthenticated())
-                        ChangeState("loggedIn");
-                    else
-                    {
-                        if (await VerifyAsync(true))
-                            ChangeState("loggedIn");
-                    }
-                    break;
-                case "cancelLogin":
-                    ClearQueuedData();
-                    ChangeState("listProfiles");
-                    break;
-                case "loggedIn": 
-                    UIPromptOKDialogue("\r\nWelcome, " + loggedInName + "!");
-                    break;
-                case "photoSelected":
-                    UIPicWindow(savedFrame, "Nice picture! What would you like to do with it?", "Delete it", "Keep it");
-                    break;
-                case "deletePhoto":
-                    if (!ShouldBeAuthenticated())
-                    {
-                        await DeleteSelectedPhoto();
-                        ChangeState("listFaceImages");
-                    }
-                    else
-                    {
-                        if (await VerifyAsync(true))
-                        {
-                            await DeleteSelectedPhoto();
-                            ChangeState("listFaceImages");
-                        }
-                    }
-                    break;
-                case "apiErrorCreate": UIPromptOKDialogue("API Error\r\n(during LargePersonGroup Person creation)"); break;
-                case "apiErrorCountingFaces": UIPromptOKDialogue("API Error\r\n(while counting faces)"); break;
-                case "apiErrorAddingFace": UIPromptOKDialogue("API Error\r\n(while adding a face)"); break;
-                case "apiErrorIdentifying": UIPromptOKDialogue("API Error\r\n(while identifying)"); break;
-                case "apiErrorGetNameAfterRejection": UIPromptOKDialogue("API Error\r\n(while trying to get name from ID after auth fail)"); break;
-                case "apiErrorTrainingStatus": UIPromptOKDialogue("API Error\r\n(while checking training status)"); break;
-                case "apiErrorDeletingFace": UIPromptOKDialogue("API Error\r\n(while deleting a face)"); break;
-                default: Debug.LogError("Unknown state entered! Note that states are case-sensitive. state = " + currentState); break;
+                Debug.Log("Got a task from queue in GameController");
+                await this.taskQueue.Dequeue();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("Error invoking Task on main thread!\n" + e);
             }
         }
+    }
+
+    public void AddTask(GameState state)
+    {
+        Task toQueue = null;
+        switch (state)
+        {
+            case GameState.ROS_CONNECTION:              toQueue = this.OpenROSConnectScreen(); break;
+
+            case GameState.STARTED:                     toQueue = this.StartGame(); break;
+            case GameState.NEW_PROFILE_PROMPT:          toQueue = this.AskNewProfile(); break;
+            case GameState.MUST_LOGIN_PROMPT:           toQueue = this.ShowMustLogin(); break;
+            case GameState.ENTER_NAME_PROMPT:           toQueue = this.AskForNewProfileName(); break;
+            case GameState.EVALUATING_TYPED_NAME:       toQueue = this.EvaluateTypedNameAsync(); break;
+            case GameState.LISTING_IMAGES:              toQueue = this.ShowPicturesForProfile(); break;
+            case GameState.TAKING_WEBCAM_PIC:           toQueue = this.OpenWebcamForPictureAsync(); break;
+            case GameState.CHECKING_TAKEN_PIC:          toQueue = this.CheckPictureTakenAsync(); break;
+            case GameState.PIC_APPROVAL:                toQueue = this.ShowImgApprovalPage(); break;
+            case GameState.PIC_DISAPPROVAL:             toQueue = this.ShowImgDisapprovalPage(); break;
+            case GameState.SAVING_PIC:                  toQueue = this.AddImgToProfileAsync(); break;
+            case GameState.LISTING_PROFILES:            toQueue = this.ListProfiles(); break;
+            case GameState.LOGIN_DOUBLE_CHECK:          toQueue = this.ShowLoginDoubleCheck(); break;
+            case GameState.LOGGING_IN:                  toQueue = this.LogIn(); break;
+            case GameState.CANCELLING_LOGIN:            toQueue = this.CancelLogin(); break;
+            case GameState.WELCOME_SCREEN:              toQueue = this.ShowWelcomeScreen(); break;
+            case GameState.SHOWING_SELECTED_PHOTO:      toQueue = this.ShowSelectedPhoto(); break;
+            case GameState.DELETING_PHOTO:              toQueue = this.DeletePhotoAsync(); break;
+            
+            case GameState.API_ERROR_CREATE:            toQueue = this.APIError(state, "(during LargePersonGroup Person creation)"); break;
+            case GameState.API_ERROR_COUNTING_FACES:    toQueue = this.APIError(state, "(while counting faces)"); break;
+            case GameState.API_ERROR_ADDING_FACE:       toQueue = this.APIError(state, "(while adding a face)"); break;
+            case GameState.API_ERROR_IDENTIFYING:       toQueue = this.APIError(state, "(while identifying)"); break;
+            case GameState.API_ERROR_GET_NAME:          toQueue = this.APIError(state, "(while trying to get name from ID after auth fail)"); break;
+            case GameState.API_ERROR_TRAINING_STATUS:   toQueue = this.APIError(state, "(while checking training status)"); break;
+            case GameState.API_ERROR_DELETING_FACE:     toQueue = this.APIError(state, "(while deleting a face)"); break;
+        }
+
+        if (toQueue != null)
+            this.taskQueue.Enqueue(toQueue);
+    }
+    /*
+    // HELLO_WORLD_ACK
+    private void OnHelloWorldAckReceived(Dictionary<string, object> args)
+    {
+        Logger.Log("OnHelloWorldAckReceived");
+        Constants.PARTICIPANT_ID = (string)args["participant_id"];
+        this.taskQueue.Enqueue(() => {
+            // Remember what the previous story name was.
+            this.prevSessionStoryName = (string)args["story_name"];
+            // The app should begin in explore mode, and let the controller know.
+            this.goToExploreMode();
+        });
+    }
+
+    // Clean up.
+    void OnApplicationQuit()
+    {
+        if (this.rosManager != null && this.rosManager.isConnected())
+        {
+            // Stop the thread that's sending StorybookState messages.
+            this.rosManager.StopSendingStorybookState();
+            // Close the ROS connection cleanly.
+            this.rosManager.CloseConnection();
+        }
+    }*/
+
+    private async Task OpenROSConnectScreen()
+    {
+        SetState(GameState.ROS_CONNECTION);
+        ClearQueuedData(); // there shouldn't be any, but just in case...
+        adjuster.HideAllElements();
+        SceneManager.LoadScene("ROS Connection", LoadSceneMode.Single);
+    }
+
+    private async Task StartGame()
+    {
+        SetState(GameState.STARTED);
+        ClearQueuedData();
+        adjuster.AskQuestion("\r\nHi! Are you new here?");
+    }
+
+    private async Task AskNewProfile()
+    {
+        SetState(GameState.NEW_PROFILE_PROMPT);
+        adjuster.AskQuestion("\r\nWould you like to make a profile?");
+    }
+
+    private async Task ShowMustLogin()
+    {
+        SetState(GameState.MUST_LOGIN_PROMPT);
+        adjuster.PromptOKDialogue("\r\nIn order to use the app, you must be logged into a profile.");
+    }
+
+    private async Task AskForNewProfileName()
+    {
+        SetState(GameState.ENTER_NAME_PROMPT);
+        adjuster.PromptInputText("What is your name?\r\n\r\nPlease ensure that the name you enter is valid.");
+    }
+
+    private async Task EvaluateTypedNameAsync()
+    {
+        SetState(GameState.EVALUATING_TYPED_NAME);
+        string entered = adjuster.GetTypedInput().ToLower();
+        if (IsInvalidName(entered))  // conditions for an invalid name
+            AddTask(GameState.ENTER_NAME_PROMPT);
         else
         {
+            adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (creating LargePersonGroup Person)");
+            string personID = await apiHelper.CreatePersonAsync(entered);
+            if (personID != "") //successful API call
+            {
+                loggedInName = entered;
+                folderName = entered;
+                CreateProfile();
+                SetPersonID(personID);
+                AddTask(GameState.WELCOME_SCREEN);
+            }
+            else
+            { // maybe internet is down, maybe api access is revoked...
+                AddTask(GameState.API_ERROR_CREATE);
+                Debug.LogError("API Error occurred while trying to create a LargePersonGroup Person");
+            }
+        }
+    }
+
+    private async Task ShowPicturesForProfile()
+    {
+        SetState(GameState.LISTING_IMAGES);
+        Dictionary<Tuple<string, string>, string> imageList = LoadImages();
+        adjuster.ListImages("Here is your photo listing:", imageList);
+    }
+
+    private async Task OpenWebcamForPictureAsync()
+    {
+        SetState(GameState.TAKING_WEBCAM_PIC);
+        await AuthenticateIfNecessaryThenDo(() => {
+            adjuster.ShowWebcam("Take a picture!", "Snap!");
+        }, true);
+    }
+
+    private async Task CheckPictureTakenAsync()
+    {
+        SetState(GameState.CHECKING_TAKEN_PIC);
+        Sprite frame = adjuster.GrabCurrentWebcamFrame();
+        adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (counting faces in image)");
+        byte[] imgData = frame.texture.EncodeToPNG();
+
+        int numFaces = await apiHelper.CountFacesAsync(imgData);
+        if (numFaces == -1)
+        {
+            AddTask(GameState.API_ERROR_COUNTING_FACES);
+            Debug.LogError("API Error occurred while trying to count the faces in a frame");
             return;
         }
 
-	}
-
-    public void ChangeState(string newState)
-    {
-        currentState = newState;
-        shouldUpdate = true;
+        if (numFaces < 1)   //pic has no detectable faces in it... try again.
+            AddTask(GameState.PIC_DISAPPROVAL);
+        else
+        {
+            await AuthenticateIfNecessaryThenDo(() => {
+                savedFrame = frame;
+                AddTask(GameState.PIC_APPROVAL);
+            }, true, frame);
+        }
     }
 
-    public string GetGameState()
+    private async Task ShowImgDisapprovalPage()
+    {
+        SetState(GameState.PIC_DISAPPROVAL);
+        adjuster.PicWindow(SadFaceSprite(), "I didn't like this picture :( Can we try again?", "Try again...", "Cancel");
+    }
+
+    private async Task ShowImgApprovalPage()
+    {
+        SetState(GameState.PIC_APPROVAL);
+        adjuster.PicWindow(savedFrame, "I like it! What do you think?", "Keep it!", "Try again...");
+    }
+
+    private async Task AddImgToProfileAsync()
+    {
+        SetState(GameState.SAVING_PIC);
+        await AddImgToProfile();
+        AddTask(GameState.LISTING_IMAGES);
+    }
+
+    private async Task ListProfiles()
+    {
+        SetState(GameState.LISTING_PROFILES);
+        Dictionary<Tuple<string, string>, string> profiles = LoadProfiles();
+        adjuster.ListProfiles("Here are the existing profiles:", profiles);
+    }
+
+    private async Task ShowLoginDoubleCheck()
+    {
+        SetState(GameState.LOGIN_DOUBLE_CHECK);
+        Sprite pic = ImgDirToSprite(GetProfilePicDir(loggedInName));
+        string displayName = FolderNameToLoginName(loggedInName);
+        adjuster.PicWindow(pic, "Are you sure you want to log in as " + displayName + "?", "Login", "Back");
+    }
+
+    private async Task LogIn()
+    {
+        SetState(GameState.LOGGING_IN);
+        LoadProfileData(loggedInName);
+        await AuthenticateIfNecessaryThenDo(() => {
+            AddTask(GameState.WELCOME_SCREEN);
+        }, true);
+    }
+
+    private async Task CancelLogin()
+    {
+        SetState(GameState.CANCELLING_LOGIN);
+        ClearQueuedData();
+        AddTask(GameState.LISTING_PROFILES);
+    }
+
+    private async Task ShowWelcomeScreen()
+    {
+        SetState(GameState.WELCOME_SCREEN);
+        adjuster.PromptOKDialogue("\r\nWelcome, " + loggedInName + "!");
+    }
+
+    private async Task ShowSelectedPhoto()
+    {
+        SetState(GameState.SHOWING_SELECTED_PHOTO);
+        adjuster.PicWindow(savedFrame, "Nice picture! What would you like to do with it?", "Delete it", "Keep it");
+    }
+
+    private async Task DeletePhotoAsync()
+    {
+        SetState(GameState.DELETING_PHOTO);
+        await AuthenticateIfNecessaryThenDo(async () => {
+            await DeleteSelectedPhoto();
+            this.taskQueue.Enqueue(this.ShowPicturesForProfile());
+            AddTask(GameState.LISTING_IMAGES);
+        }, true);
+    }
+
+    private async Task APIError(GameState newState, string err)
+    {
+        SetState(newState);
+        adjuster.PromptOKDialogue("API Error\r\n" + err);
+    }
+
+    private async Task AuthenticateIfNecessaryThenDo(Action f, bool showRejectionPrompt, Sprite imgToCheck = null)
+    {
+        if (!ShouldBeAuthenticated())
+        {
+            f();
+        }
+        else
+        {
+            if (await VerifyAsync(showRejectionPrompt))
+            {
+                f();
+            }
+        }
+    }
+
+    private void SetState(GameState newState)
+    {
+        currentState = newState;
+    }
+
+    public GameState GetGameState()
     {
         return currentState;
     }
 
     private void CreateProfile()
     {
-        if (Directory.Exists(Path.Combine(SAVE_PATH, loggedInName)))
+        if (Directory.Exists(Path.Combine(Constants.SAVE_PATH, loggedInName)))
         {
             multipleNames = true;
-            int count = Directory.GetDirectories(SAVE_PATH, loggedInName + "*").Length;
+            int count = Directory.GetDirectories(Constants.SAVE_PATH, loggedInName + "*").Length;
             folderName = loggedInName + " (" + count + ")";
         }
-        Directory.CreateDirectory(Path.Combine(SAVE_PATH, folderName));
+        Directory.CreateDirectory(Path.Combine(Constants.SAVE_PATH, folderName));
         profileInfo = new Dictionary<string, string>();
         profileInfo.Add("personID", "..."); //todo: change this to the actual personID
         profileInfo.Add("count", "0");
@@ -262,7 +375,7 @@ public class GameController : MonoBehaviour {
     //TODO: maybe change this to use Object serialization... lol
     private void ExportProfileInfo()
     {
-        string savePath = Path.Combine(SAVE_PATH, folderName, "info.txt");
+        string savePath = Path.Combine(Constants.SAVE_PATH, folderName, "info.txt");
         List<string> dataToSave = new List<string>();
         dataToSave.Add("{");
         for (int i = 0; i < profileInfo.Keys.Count; i++)
@@ -286,7 +399,7 @@ public class GameController : MonoBehaviour {
 
         Dictionary<Tuple<string, string>, string> images = new Dictionary<Tuple<string, string>, string>();
 
-        string path = Path.Combine(SAVE_PATH, folderName);
+        string path = Path.Combine(Constants.SAVE_PATH, folderName);
         string[] dirs = Directory.GetFiles(path, "*.png");
         int count = 0;
         foreach (string img in dirs)
@@ -307,7 +420,7 @@ public class GameController : MonoBehaviour {
 
     private async Task AddImgToProfile()
     {
-        UIPromptNoButtonPopUp("Hold on, I'm thinking... (adding Face to LargePersonGroup Person)");
+        adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (adding Face to LargePersonGroup Person)");
         Texture2D tex = savedFrame.texture;
         byte[] imgData = tex.EncodeToPNG();
 
@@ -315,13 +428,13 @@ public class GameController : MonoBehaviour {
 
         if (persistedId == "")
         {
-            ChangeState("apiErrorAddingFace");
+            AddTask(GameState.API_ERROR_ADDING_FACE);
             Debug.LogError("API Error while trying to add Face to LargePersonGroup Person");
             return;
         }
 
         int count = Int32.Parse(profileInfo["count"]);
-        System.IO.File.WriteAllBytes(Path.Combine(SAVE_PATH, folderName, "Image " + count + ".png"), tex.EncodeToPNG());
+        System.IO.File.WriteAllBytes(Path.Combine(Constants.SAVE_PATH, folderName, "Image " + count + ".png"), tex.EncodeToPNG());
         profileInfo["count"] = (count + 1).ToString();
         profileInfo["Image " + count] = persistedId;
         ExportProfileInfo();
@@ -333,7 +446,7 @@ public class GameController : MonoBehaviour {
         try
         {
             Dictionary<Tuple<string, string>, string> profiles = new Dictionary<Tuple<string, string>, string>();
-            string[] profileDirs = Directory.GetDirectories(SAVE_PATH);
+            string[] profileDirs = Directory.GetDirectories(Constants.SAVE_PATH);
             int unknownCount = 0;
             foreach (string p in profileDirs)
             {
@@ -360,10 +473,10 @@ public class GameController : MonoBehaviour {
     {
         string dir;
 
-        string[] profileImgDirs = Directory.GetFiles(Path.Combine(SAVE_PATH, fName), "*.png");
+        string[] profileImgDirs = Directory.GetFiles(Path.Combine(Constants.SAVE_PATH, fName), "*.png");
         if (profileImgDirs.Length < 1)
         {
-            dir = "(" + unknown + ") " + GameController.UNKNOWN_IMG;
+            dir = "(" + unknown + ") " + Constants.UNKNOWN_IMG_RSRC_PATH;
             unknown++;
         }
         else
@@ -387,7 +500,7 @@ public class GameController : MonoBehaviour {
     public void LoginAreYouSure(string profile)
     {
         loggedInName = profile;
-        ChangeState("loginAreYouSure");
+        AddTask(GameState.LOGIN_DOUBLE_CHECK);
     }
 
     private void LoadProfileData(string profName)
@@ -408,7 +521,7 @@ public class GameController : MonoBehaviour {
 
     private void LoadDataFile()
     {
-        profileInfo = ReadJsonDictFromFile(Path.Combine(SAVE_PATH, folderName, "info.txt"));
+        profileInfo = ReadJsonDictFromFile(Path.Combine(Constants.SAVE_PATH, folderName, "info.txt"));
     }
 
     private Dictionary<string, string> ReadJsonDictFromFile(string path)
@@ -420,9 +533,9 @@ public class GameController : MonoBehaviour {
 
     public void SelectPhoto(string identifier)
     {
-        savedFrame = ImgDirToSprite(Path.Combine(SAVE_PATH, identifier));
+        savedFrame = ImgDirToSprite(Path.Combine(Constants.SAVE_PATH, identifier));
         savedFrameDir = identifier;
-        ChangeState("photoSelected");
+        AddTask(GameState.SHOWING_SELECTED_PHOTO);
     }
 
     private async Task DeleteSelectedPhoto()
@@ -430,7 +543,7 @@ public class GameController : MonoBehaviour {
         string fileName = Path.GetFileNameWithoutExtension(savedFrameDir);
         string persistedId = profileInfo[fileName];
 
-        UIPromptNoButtonPopUp("Hold on, I'm thinking... (deleting Face from LargePersonGroup Person)");
+        adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (deleting Face from LargePersonGroup Person)");
 
         bool deleted = await apiHelper.DeleteFaceAsync(profileInfo["personID"], persistedId);
 
@@ -438,12 +551,12 @@ public class GameController : MonoBehaviour {
         {
             profileInfo[fileName] = "deleted";
             ExportProfileInfo();
-            File.Delete(Path.Combine(SAVE_PATH, savedFrameDir));
+            File.Delete(Path.Combine(Constants.SAVE_PATH, savedFrameDir));
             await RetrainProfilesAsync();
         }
         else
         {
-            ChangeState("apiErrorDeletingFace");
+            AddTask(GameState.API_ERROR_DELETING_FACE);
             Debug.LogError("API Error while trying to delete Face from LargePersonGroup Person");
             return;
         }
@@ -473,25 +586,26 @@ public class GameController : MonoBehaviour {
 
     private async Task<bool> VerifyAsync(bool showRejectionPrompt = false, Sprite imgToCheck = null)
     {
+        adjuster.HideAllElements();
         Sprite frame;
 
         if (imgToCheck == null)
         {
             adjuster.EnableCamera();
-            await Task.Delay(CAM_DELAY_MS); //add delay so that the camera can turn on and focus
+            await Task.Delay(Constants.CAM_DELAY_MS); //add delay so that the camera can turn on and focus
             frame = adjuster.GrabCurrentWebcamFrame();
         }
         else
             frame = imgToCheck;
 
-        UIPromptNoButtonPopUp("Hold on, I'm thinking... (identifying faces in current frame)");
+        adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (identifying faces in current frame)");
         byte[] frameData = frame.texture.EncodeToPNG();
 
         Dictionary<string, decimal> guesses = await apiHelper.IdentifyBiggestInImageAsync(frameData);
 
         if (guesses == null)
         {
-            ChangeState("apiErrorIdentifying");
+            AddTask(GameState.API_ERROR_IDENTIFYING);
             Debug.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
             return false;
         }
@@ -511,14 +625,14 @@ public class GameController : MonoBehaviour {
                     response += " not sure who you are, to be honest.";
                 else
                 {
-                    UIPromptNoButtonPopUp("Hold on, I'm thinking... (retrieving name(s) from personId(s)");
+                    adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (retrieving name(s) from personId(s))");
                     for (int i = 0; i < guesses.Count; i++)
                     {
                         string key = guesses.Keys.ElementAt(i);
                         string nameFromID = await apiHelper.GetNameFromIDAsync(key);
                         if (nameFromID == "")
                         {
-                            ChangeState("apiErrorGetNameAfterRejection");
+                            AddTask(GameState.API_ERROR_GET_NAME);
                             Debug.LogError("API Error occurred while trying to get name from ID (after auth fail)");
                             return false;
                         }
@@ -532,7 +646,7 @@ public class GameController : MonoBehaviour {
                             response += ",";
                     }
                 }
-                UIPromptOKDialogue(response);
+                adjuster.PromptOKDialogue(response);
             }
             return false;
         }
@@ -549,19 +663,19 @@ public class GameController : MonoBehaviour {
         else
         {
             decimal confidence = guesses[personId];
-            return confidence >= CONFIDENCE_THRESHOLD;
+            return confidence >= Constants.CONFIDENCE_THRESHOLD;
         }
     }
 
     private async Task RetrainProfilesAsync()
     {
-        UIPromptNoButtonPopUp("Hold on, I'm thinking... (re-training profiles)");
+        adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (re-training profiles)");
         await apiHelper.StartTrainingAsync();
         string status = await apiHelper.GetTrainingStatusAsync();
         while (status != FaceAPIHelper.TRAINING_SUCCEEDED)
         {
             if (status == FaceAPIHelper.TRAINING_FAILED || status == FaceAPIHelper.TRAINING_API_ERROR) {
-                ChangeState("apiErrorTrainingStatus");
+                AddTask(GameState.API_ERROR_TRAINING_STATUS);
                 Debug.LogError("API Error occurred when checking training status");
                 return;
             }
@@ -569,111 +683,6 @@ public class GameController : MonoBehaviour {
             status = await apiHelper.GetTrainingStatusAsync();
             Debug.Log("status = " + status);
         }
-    }
-
-    private void UIAskQuestion(string q)
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetQuestionPopUpText(q);
-
-        //show the window after changes are made
-        adjuster.ShowQuestionPopUp();
-    }
-
-    private void UIPromptInputText(string prompt)
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetTextInputPrompt(prompt);
-
-        //show the window after changes are made
-        adjuster.ShowTextInput();
-    }
-
-    private void UIPromptOKDialogue(string prompt)
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetOKPopUpText(prompt);
-
-        //show the window after changes are made
-        adjuster.ShowOKPopUp();
-    }
-
-    private void UIListProfiles(string prompt, Dictionary<Tuple<string, string>, string> profiles)
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetProfileListText(prompt);
-        adjuster.UpdateProfileList(profiles);
-
-        //show the window after changes are made
-        adjuster.ShowProfileList(true);
-    }
-
-    private void UIListImages(string prompt, Dictionary<Tuple<string, string>, string> profiles)
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetImageListText(prompt);
-        adjuster.UpdateImageList(profiles);
-
-        //show the window after changes are made
-        adjuster.ShowImageList(true);
-    }
-
-    private void UIShowWebcam(string prompt, string updateText = "Update", string cancelText = "Cancel")
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetUpdateCancelPopUpText(prompt);
-        adjuster.SetUpdateButtonText(updateText);
-        adjuster.SetCancelButtonText(cancelText);
-
-        //show the window after changes are made
-        adjuster.ShowUpdateCancelButtonPopUp();
-        adjuster.ShowCameraFeed();
-    }
-
-    private void UIPicWindow(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel")
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetUpdateCancelPopUpText(prompt);
-        adjuster.SetUpdateButtonText(updateText);
-        adjuster.SetCancelButtonText(cancelText);
-        adjuster.ChangeUpdateImage(pic);
-
-        //show the window after changes are made
-        adjuster.ShowUpdateCancelButtonPopUp();
-        adjuster.ShowUpdateImage();
-    }
-
-    private void UIPromptNoButtonPopUp(string prompt)
-    {
-        //hide everything not in use
-        adjuster.HideAllElements();
-
-        //change values
-        adjuster.SetNoButtonPopUpText(prompt);
-
-        //show the window after changes are made
-        adjuster.ShowNoButtonPopUp();
     }
 
     private bool IsInvalidName(string nameToTest) 
@@ -717,7 +726,7 @@ public class GameController : MonoBehaviour {
 
         if (dir.Contains("unknown"))
         {
-            tex = Resources.Load(GameController.UNKNOWN_IMG) as Texture2D;
+            tex = Resources.Load(Constants.UNKNOWN_IMG_RSRC_PATH) as Texture2D;
         }
         else
         {
@@ -733,19 +742,18 @@ public class GameController : MonoBehaviour {
 
     private Sprite SadFaceSprite()
     {
-        Texture2D tex = Resources.Load(GameController.SADFACE_IMG) as Texture2D;
+        Texture2D tex = Resources.Load(Constants.SADFACE_IMG_RSRC_PATH) as Texture2D;
         Sprite newImage = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0, 0));
         return newImage;
     }
 
-    private static string DetermineSavePath()
+    public static string DetermineSavePath()
     {
-        string ret = Path.Combine(Directory.GetCurrentDirectory(), "ProfileData");
+        string ret = Constants.EDITOR_SAVE_PATH;
 
         #if UNITY_ANDROID
         Debug.Log("Unity Android Detected");
-        ret = Path.Combine("sdcard", "PersonalRobotsGroup.FaceIDApp", "ProfileData");
-        //ret = "/sdcard/PersonalRobotsGroup.FaceIDApp/ProfileData";
+        ret = Constants.ANDROID_SAVE_PATH;
         #endif
 
         return ret;

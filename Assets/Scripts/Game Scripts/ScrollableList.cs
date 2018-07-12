@@ -104,7 +104,7 @@ public class ScrollableList : MonoBehaviour
             // "(0) " + GameController.UNKNOWN_IMG
 
             int index = path.IndexOf(')');
-            if (index > 0 && path.Substring(index + 2) == GameController.UNKNOWN_IMG)
+            if (index > 0 && path.Substring(index + 2) == Constants.UNKNOWN_IMG_RSRC_PATH)
             {
                 handler.SetImgToDefault();
             }

@@ -98,6 +98,7 @@ public class WebcamController : MonoBehaviour
 	// guaranteed to report correct data as soon as device camera is started
 	void Update()
 	{
+        Debug.Log("camEnabled: " + camEnabled);
         if (camEnabled)
         {
             // Skip making adjustment for incorrect camera data

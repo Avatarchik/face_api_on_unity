@@ -28,7 +28,7 @@ public class ProfileHandler : MonoBehaviour {
 
     public void SetImgToDefault()
     {
-        Texture2D tex = Resources.Load(GameController.UNKNOWN_IMG) as Texture2D;
+        Texture2D tex = Resources.Load(Constants.UNKNOWN_IMG_RSRC_PATH) as Texture2D;
         Sprite newImage = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0, 0));
         profileImage.sprite = newImage;
     }

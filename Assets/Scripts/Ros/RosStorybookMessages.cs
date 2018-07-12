@@ -9,6 +9,14 @@
  *
  */
 
+public enum FaceIDEventType {
+    
+}
+
+public enum FaceIDCommand {
+    
+}
+
 // Messages from the storybook to the controller.
 /*public enum StorybookEventType {
     HELLO_WORLD = 0,

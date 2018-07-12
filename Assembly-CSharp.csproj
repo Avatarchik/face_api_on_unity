@@ -71,6 +71,8 @@
     <Compile Include="Assets\Scripts\Ros\RosbridgeWebSocketClient.cs" />
     <Compile Include="Assets\Scripts\Ros\RosManager.cs" />
     <Compile Include="Assets\Scripts\Ros\RosStorybookMessages.cs" />
+    <Compile Include="Assets\Scripts\Util\Constants.cs" />
+    <Compile Include="Assets\Scripts\Util\GameStates.cs" />
     <None Include="Assets\Resources\api_access_key.txt" />
     <Reference Include="UnityEditor.StandardEvents">
       <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>
