@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -14,15 +15,15 @@ public class GameController : MonoBehaviour {
     // The singleton instance.
     public static GameController instance = null;
 
-    private Queue<Task> taskQueue = new Queue<Task>();
+    private Queue<Func<Task>> taskQueue = new Queue<Func<Task>>();
 
     private RosManager rosManager;
+    private UIAdjuster adjuster;
+    private FaceAPIHelper apiHelper;
 
     public Canvas uiElementContainer;
 
     private GameState currentState;
-
-    private UIAdjuster adjuster;
 
     private string loggedInName, folderName;    //will always be the same, unless theres > 1 of the same loggedInName
     private Dictionary<string, string> profileInfo;
@@ -30,7 +31,7 @@ public class GameController : MonoBehaviour {
 
     private Sprite savedFrame;
     private string savedFrameDir;
-    private FaceAPIHelper apiHelper;
+    private Dictionary<GameState, Func<Task>> commands;
 
     void Awake()
     {
@@ -38,10 +39,11 @@ public class GameController : MonoBehaviour {
         if (instance == null)
         {
             instance = this;
+            //unityScheduler = TaskScheduler.FromCurrentSynchronizationContext();
         }
         else if (instance != this)
         {
-            Debug.Log("duplicate GameController, destroying");
+            Logger.Log("duplicate GameController, destroying");
             Destroy(gameObject);
         }
         DontDestroyOnLoad(gameObject);
@@ -53,9 +55,11 @@ public class GameController : MonoBehaviour {
         adjuster = uiElementContainer.gameObject.GetComponent<UIAdjuster>();
         TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
         apiHelper = new FaceAPIHelper(api_access_key.text, Constants.PERSON_GROUP_ID);
+        InitCommandDict();
 
-        SetState(GameState.GAMECONTROLLER_STARTING);
+        //SetState(GameState.GAMECONTROLLER_STARTING);
 
+        //AddTask(GameState.STARTED);
         AddTask(GameState.ROS_CONNECTION);
 
         if (!Directory.Exists(Constants.SAVE_PATH))
@@ -65,13 +69,15 @@ public class GameController : MonoBehaviour {
 	}
 	
 	// Update is called once per frame
+    // needs to be async because API calls are currently all marked with the async keyword
 	async void Update()
     {
-        //Debug.Log("Current gameState: " + this.GetGameState());
+        //Logger.Log("Current gameState: " + this.GetGameState());
         await HandleTaskQueue();
 	}
 
     // Handle main task queue.
+    // needs to be async because API calls are currently all marked with the async keyword
     private async Task HandleTaskQueue()
     {
         // Pop tasks from the task queue and perform them.
@@ -80,271 +86,340 @@ public class GameController : MonoBehaviour {
         {
             try
             {
-                Debug.Log("Got a task from queue in GameController");
-                await this.taskQueue.Dequeue();
+                Logger.Log("Got a task from queue in GameController");
+                await this.taskQueue.Dequeue().Invoke();
             }
             catch (Exception e)
             {
-                Debug.LogError("Error invoking Task on main thread!\n" + e);
+                Logger.LogError("Error invoking Task on main thread!\n" + e);
             }
         }
     }
 
-    public void AddTask(GameState state)
+
+    private void InitCommandDict()
     {
-        Task toQueue = null;
-        switch (state)
+        commands = new Dictionary<GameState, Func<Task>>()
         {
-            case GameState.ROS_CONNECTION:              toQueue = this.OpenROSConnectScreen(); break;
+            {GameState.ROS_CONNECTION, this.OpenROSConnectScreen()},
 
-            case GameState.STARTED:                     toQueue = this.StartGame(); break;
-            case GameState.NEW_PROFILE_PROMPT:          toQueue = this.AskNewProfile(); break;
-            case GameState.MUST_LOGIN_PROMPT:           toQueue = this.ShowMustLogin(); break;
-            case GameState.ENTER_NAME_PROMPT:           toQueue = this.AskForNewProfileName(); break;
-            case GameState.EVALUATING_TYPED_NAME:       toQueue = this.EvaluateTypedNameAsync(); break;
-            case GameState.LISTING_IMAGES:              toQueue = this.ShowPicturesForProfile(); break;
-            case GameState.TAKING_WEBCAM_PIC:           toQueue = this.OpenWebcamForPictureAsync(); break;
-            case GameState.CHECKING_TAKEN_PIC:          toQueue = this.CheckPictureTakenAsync(); break;
-            case GameState.PIC_APPROVAL:                toQueue = this.ShowImgApprovalPage(); break;
-            case GameState.PIC_DISAPPROVAL:             toQueue = this.ShowImgDisapprovalPage(); break;
-            case GameState.SAVING_PIC:                  toQueue = this.AddImgToProfileAsync(); break;
-            case GameState.LISTING_PROFILES:            toQueue = this.ListProfiles(); break;
-            case GameState.LOGIN_DOUBLE_CHECK:          toQueue = this.ShowLoginDoubleCheck(); break;
-            case GameState.LOGGING_IN:                  toQueue = this.LogIn(); break;
-            case GameState.CANCELLING_LOGIN:            toQueue = this.CancelLogin(); break;
-            case GameState.WELCOME_SCREEN:              toQueue = this.ShowWelcomeScreen(); break;
-            case GameState.SHOWING_SELECTED_PHOTO:      toQueue = this.ShowSelectedPhoto(); break;
-            case GameState.DELETING_PHOTO:              toQueue = this.DeletePhotoAsync(); break;
-            
-            case GameState.API_ERROR_CREATE:            toQueue = this.APIError(state, "(during LargePersonGroup Person creation)"); break;
-            case GameState.API_ERROR_COUNTING_FACES:    toQueue = this.APIError(state, "(while counting faces)"); break;
-            case GameState.API_ERROR_ADDING_FACE:       toQueue = this.APIError(state, "(while adding a face)"); break;
-            case GameState.API_ERROR_IDENTIFYING:       toQueue = this.APIError(state, "(while identifying)"); break;
-            case GameState.API_ERROR_GET_NAME:          toQueue = this.APIError(state, "(while trying to get name from ID after auth fail)"); break;
-            case GameState.API_ERROR_TRAINING_STATUS:   toQueue = this.APIError(state, "(while checking training status)"); break;
-            case GameState.API_ERROR_DELETING_FACE:     toQueue = this.APIError(state, "(while deleting a face)"); break;
-        }
+            {GameState.ROS_HELLO_WORLD_ACK, this.ROSHelloWorldAck()},
 
-        if (toQueue != null)
-            this.taskQueue.Enqueue(toQueue);
+            {GameState.STARTED, this.StartGame()},
+            {GameState.NEW_PROFILE_PROMPT, this.AskNewProfile()},
+            {GameState.MUST_LOGIN_PROMPT, this.ShowMustLogin()},
+            {GameState.ENTER_NAME_PROMPT, this.AskForNewProfileName()},
+            {GameState.EVALUATING_TYPED_NAME, this.EvaluateTypedNameAsync()},
+            {GameState.LISTING_IMAGES, this.ShowPicturesForProfile()},
+            {GameState.TAKING_WEBCAM_PIC, this.OpenWebcamForPictureAsync()},
+            {GameState.CHECKING_TAKEN_PIC, this.CheckPictureTakenAsync()},
+            {GameState.PIC_APPROVAL, this.ShowImgApprovalPage()},
+            {GameState.PIC_DISAPPROVAL, this.ShowImgDisapprovalPage()},
+            {GameState.SAVING_PIC, this.AddImgToProfileAsync()},
+            {GameState.LISTING_PROFILES, this.ListProfiles()},
+            {GameState.LOGIN_DOUBLE_CHECK, this.ShowLoginDoubleCheck()},
+            {GameState.LOGGING_IN, this.LogIn()},
+            {GameState.CANCELLING_LOGIN, this.CancelLogin()},
+            {GameState.WELCOME_SCREEN, this.ShowWelcomeScreen()},
+            {GameState.SHOWING_SELECTED_PHOTO, this.ShowSelectedPhoto()},
+            {GameState.DELETING_PHOTO, this.DeletePhotoAsync()},
+
+            {GameState.API_ERROR_CREATE, this.APIError(GameState.API_ERROR_CREATE, "(during LargePersonGroup Person creation)")},
+            {GameState.API_ERROR_COUNTING_FACES, this.APIError(GameState.API_ERROR_COUNTING_FACES, "(while counting faces)")},
+            {GameState.API_ERROR_ADDING_FACE, this.APIError(GameState.API_ERROR_ADDING_FACE, "(while adding a face)")},
+            {GameState.API_ERROR_IDENTIFYING, this.APIError(GameState.API_ERROR_IDENTIFYING, "(while identifying)")},
+            {GameState.API_ERROR_GET_NAME, this.APIError(GameState.API_ERROR_GET_NAME, "(while trying to get name from ID after auth fail)")},
+            {GameState.API_ERROR_TRAINING_STATUS, this.APIError(GameState.API_ERROR_TRAINING_STATUS, "(while checking training status)")},
+            {GameState.API_ERROR_DELETING_FACE, this.APIError(GameState.API_ERROR_DELETING_FACE, "(while deleting a face)")}
+
+        };
     }
-    /*
-    // HELLO_WORLD_ACK
-    private void OnHelloWorldAckReceived(Dictionary<string, object> args)
+
+    public void AddTask(GameState state, Dictionary<string, object> properties = null)
     {
-        Logger.Log("OnHelloWorldAckReceived");
-        Constants.PARTICIPANT_ID = (string)args["participant_id"];
-        this.taskQueue.Enqueue(() => {
-            // Remember what the previous story name was.
-            this.prevSessionStoryName = (string)args["story_name"];
-            // The app should begin in explore mode, and let the controller know.
-            this.goToExploreMode();
-        });
+        if (commands.ContainsKey(state))
+        {
+            Func<Task> toQueue = commands[state];
+            this.taskQueue.Enqueue(toQueue);
+        }
+        else
+        {
+            Logger.LogError("Unknown GameState Task! state = " + state);
+        }
     }
 
     // Clean up.
     void OnApplicationQuit()
     {
-        if (this.rosManager != null && this.rosManager.isConnected())
+        if (this.rosManager != null && this.rosManager.IsConnected())
         {
             // Stop the thread that's sending StorybookState messages.
-            this.rosManager.StopSendingStorybookState();
+            this.rosManager.StopSendingFaceIDState();
             // Close the ROS connection cleanly.
             this.rosManager.CloseConnection();
         }
-    }*/
-
-    private async Task OpenROSConnectScreen()
-    {
-        SetState(GameState.ROS_CONNECTION);
-        ClearQueuedData(); // there shouldn't be any, but just in case...
-        adjuster.HideAllElements();
-        SceneManager.LoadScene("ROS Connection", LoadSceneMode.Single);
     }
 
-    private async Task StartGame()
+    private Func<Task> OpenROSConnectScreen()
     {
-        SetState(GameState.STARTED);
-        ClearQueuedData();
-        adjuster.AskQuestion("\r\nHi! Are you new here?");
-    }
-
-    private async Task AskNewProfile()
-    {
-        SetState(GameState.NEW_PROFILE_PROMPT);
-        adjuster.AskQuestion("\r\nWould you like to make a profile?");
-    }
-
-    private async Task ShowMustLogin()
-    {
-        SetState(GameState.MUST_LOGIN_PROMPT);
-        adjuster.PromptOKDialogue("\r\nIn order to use the app, you must be logged into a profile.");
-    }
-
-    private async Task AskForNewProfileName()
-    {
-        SetState(GameState.ENTER_NAME_PROMPT);
-        adjuster.PromptInputText("What is your name?\r\n\r\nPlease ensure that the name you enter is valid.");
-    }
-
-    private async Task EvaluateTypedNameAsync()
-    {
-        SetState(GameState.EVALUATING_TYPED_NAME);
-        string entered = adjuster.GetTypedInput().ToLower();
-        if (IsInvalidName(entered))  // conditions for an invalid name
-            AddTask(GameState.ENTER_NAME_PROMPT);
-        else
+        return async () =>
         {
-            adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (creating LargePersonGroup Person)");
-            string personID = await apiHelper.CreatePersonAsync(entered);
-            if (personID != "") //successful API call
-            {
-                loggedInName = entered;
-                folderName = entered;
-                CreateProfile();
-                SetPersonID(personID);
-                AddTask(GameState.WELCOME_SCREEN);
-            }
+            SetState(GameState.ROS_CONNECTION);
+            ClearQueuedData(); // there shouldn't be any, but just in case...
+            adjuster.HideAllElements();
+            SceneManager.LoadScene("ROS Connection", LoadSceneMode.Single);
+        };
+    }
+
+    private Func<Task> StartGame()
+    {
+        return async () =>
+        {
+            SetState(GameState.STARTED);
+            ClearQueuedData();
+            adjuster.AskQuestion("\r\nHi! Are you new here?");
+
+        };
+    }
+
+    private Func<Task> AskNewProfile()
+    {
+        return async () =>
+        {
+            SetState(GameState.NEW_PROFILE_PROMPT);
+            adjuster.AskQuestion("\r\nWould you like to make a profile?");
+
+        };
+    }
+
+    private Func<Task> ShowMustLogin()
+    {
+        return async () =>
+        {
+            SetState(GameState.MUST_LOGIN_PROMPT);
+            adjuster.PromptOKDialogue("\r\nIn order to use the app, you must be logged into a profile.");
+        };
+    }
+
+    private Func<Task> AskForNewProfileName()
+    {
+        return async () =>
+        {
+            SetState(GameState.ENTER_NAME_PROMPT);
+            adjuster.PromptInputText("What is your name?\r\n\r\nPlease ensure that the name you enter is valid.");
+        };
+
+    }
+
+    private Func<Task> EvaluateTypedNameAsync()
+    {
+        return async () =>
+        {
+            SetState(GameState.EVALUATING_TYPED_NAME);
+            string entered = adjuster.GetTypedInput().ToLower();
+            if (IsInvalidName(entered))  // conditions for an invalid name
+                AddTask(GameState.ENTER_NAME_PROMPT);
             else
-            { // maybe internet is down, maybe api access is revoked...
-                AddTask(GameState.API_ERROR_CREATE);
-                Debug.LogError("API Error occurred while trying to create a LargePersonGroup Person");
+            {
+                adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (creating LargePersonGroup Person)");
+                string personID = await apiHelper.CreatePersonAsync(entered);
+                if (personID != "") //successful API call
+                {
+                    loggedInName = entered;
+                    folderName = entered;
+                    CreateProfile();
+                    SetPersonID(personID);
+                    AddTask(GameState.WELCOME_SCREEN);
+                }
+                else
+                { // maybe internet is down, maybe api access is revoked...
+                    AddTask(GameState.API_ERROR_CREATE);
+                    Logger.LogError("API Error occurred while trying to create a LargePersonGroup Person");
+                }
             }
-        }
+        };
     }
 
-    private async Task ShowPicturesForProfile()
+    private Func<Task> ShowPicturesForProfile()
     {
-        SetState(GameState.LISTING_IMAGES);
-        Dictionary<Tuple<string, string>, string> imageList = LoadImages();
-        adjuster.ListImages("Here is your photo listing:", imageList);
-    }
-
-    private async Task OpenWebcamForPictureAsync()
-    {
-        SetState(GameState.TAKING_WEBCAM_PIC);
-        await AuthenticateIfNecessaryThenDo(() => {
-            adjuster.ShowWebcam("Take a picture!", "Snap!");
-        }, true);
-    }
-
-    private async Task CheckPictureTakenAsync()
-    {
-        SetState(GameState.CHECKING_TAKEN_PIC);
-        Sprite frame = adjuster.GrabCurrentWebcamFrame();
-        adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (counting faces in image)");
-        byte[] imgData = frame.texture.EncodeToPNG();
-
-        int numFaces = await apiHelper.CountFacesAsync(imgData);
-        if (numFaces == -1)
+        return async () =>
         {
-            AddTask(GameState.API_ERROR_COUNTING_FACES);
-            Debug.LogError("API Error occurred while trying to count the faces in a frame");
-            return;
-        }
+            SetState(GameState.LISTING_IMAGES);
+            Dictionary<Tuple<string, string>, string> imageList = LoadImages();
+            adjuster.ListImages("Here is your photo listing:", imageList);
+        };
+    }
 
-        if (numFaces < 1)   //pic has no detectable faces in it... try again.
-            AddTask(GameState.PIC_DISAPPROVAL);
-        else
+    private Func<Task> OpenWebcamForPictureAsync()
+    {
+        return async () =>
         {
-            await AuthenticateIfNecessaryThenDo(() => {
-                savedFrame = frame;
-                AddTask(GameState.PIC_APPROVAL);
-            }, true, frame);
-        }
+            SetState(GameState.TAKING_WEBCAM_PIC);
+            await AuthenticateIfNecessaryThenDo(() =>
+            {
+                adjuster.ShowWebcam("Take a picture!", "Snap!");
+            }, true);
+        };
     }
 
-    private async Task ShowImgDisapprovalPage()
+    private Func<Task> CheckPictureTakenAsync()
     {
-        SetState(GameState.PIC_DISAPPROVAL);
-        adjuster.PicWindow(SadFaceSprite(), "I didn't like this picture :( Can we try again?", "Try again...", "Cancel");
+        return async () =>
+        {
+            SetState(GameState.CHECKING_TAKEN_PIC);
+            Sprite frame = adjuster.GrabCurrentWebcamFrame();
+            adjuster.PromptNoButtonPopUp("Hold on, I'm thinking... (counting faces in image)");
+            byte[] imgData = frame.texture.EncodeToPNG();
+
+            int numFaces = await apiHelper.CountFacesAsync(imgData);
+            if (numFaces == -1)
+            {
+                AddTask(GameState.API_ERROR_COUNTING_FACES);
+                Logger.LogError("API Error occurred while trying to count the faces in a frame");
+                return;
+            }
+
+            if (numFaces < 1)   //pic has no detectable faces in it... try again.
+                AddTask(GameState.PIC_DISAPPROVAL);
+            else
+            {
+                await AuthenticateIfNecessaryThenDo(() =>
+                {
+                    savedFrame = frame;
+                    AddTask(GameState.PIC_APPROVAL);
+                }, true, frame);
+            }
+
+        };
     }
 
-    private async Task ShowImgApprovalPage()
+    private Func<Task> ShowImgDisapprovalPage()
     {
-        SetState(GameState.PIC_APPROVAL);
-        adjuster.PicWindow(savedFrame, "I like it! What do you think?", "Keep it!", "Try again...");
+        return async () =>
+        {
+            SetState(GameState.PIC_DISAPPROVAL);
+            adjuster.PicWindow(SadFaceSprite(), "I didn't like this picture :( Can we try again?", "Try again...", "Cancel");
+        };
     }
 
-    private async Task AddImgToProfileAsync()
+    private Func<Task> ShowImgApprovalPage()
     {
-        SetState(GameState.SAVING_PIC);
-        await AddImgToProfile();
-        AddTask(GameState.LISTING_IMAGES);
+        return async () =>
+        {
+            SetState(GameState.PIC_APPROVAL);
+            adjuster.PicWindow(savedFrame, "I like it! What do you think?", "Keep it!", "Try again...");
+        };
     }
 
-    private async Task ListProfiles()
+    private Func<Task> AddImgToProfileAsync()
     {
-        SetState(GameState.LISTING_PROFILES);
-        Dictionary<Tuple<string, string>, string> profiles = LoadProfiles();
-        adjuster.ListProfiles("Here are the existing profiles:", profiles);
-    }
-
-    private async Task ShowLoginDoubleCheck()
-    {
-        SetState(GameState.LOGIN_DOUBLE_CHECK);
-        Sprite pic = ImgDirToSprite(GetProfilePicDir(loggedInName));
-        string displayName = FolderNameToLoginName(loggedInName);
-        adjuster.PicWindow(pic, "Are you sure you want to log in as " + displayName + "?", "Login", "Back");
-    }
-
-    private async Task LogIn()
-    {
-        SetState(GameState.LOGGING_IN);
-        LoadProfileData(loggedInName);
-        await AuthenticateIfNecessaryThenDo(() => {
-            AddTask(GameState.WELCOME_SCREEN);
-        }, true);
-    }
-
-    private async Task CancelLogin()
-    {
-        SetState(GameState.CANCELLING_LOGIN);
-        ClearQueuedData();
-        AddTask(GameState.LISTING_PROFILES);
-    }
-
-    private async Task ShowWelcomeScreen()
-    {
-        SetState(GameState.WELCOME_SCREEN);
-        adjuster.PromptOKDialogue("\r\nWelcome, " + loggedInName + "!");
-    }
-
-    private async Task ShowSelectedPhoto()
-    {
-        SetState(GameState.SHOWING_SELECTED_PHOTO);
-        adjuster.PicWindow(savedFrame, "Nice picture! What would you like to do with it?", "Delete it", "Keep it");
-    }
-
-    private async Task DeletePhotoAsync()
-    {
-        SetState(GameState.DELETING_PHOTO);
-        await AuthenticateIfNecessaryThenDo(async () => {
-            await DeleteSelectedPhoto();
-            this.taskQueue.Enqueue(this.ShowPicturesForProfile());
+        return async () =>
+        {
+            SetState(GameState.SAVING_PIC);
+            await AddImgToProfile();
             AddTask(GameState.LISTING_IMAGES);
-        }, true);
+        };
     }
 
-    private async Task APIError(GameState newState, string err)
+    private Func<Task> ListProfiles()
     {
-        SetState(newState);
-        adjuster.PromptOKDialogue("API Error\r\n" + err);
+        return async () =>
+        {
+            SetState(GameState.LISTING_PROFILES);
+            Dictionary<Tuple<string, string>, string> profiles = LoadProfiles();
+            adjuster.ListProfiles("Here are the existing profiles:", profiles);
+        };
+    }
+
+    private Func<Task> ShowLoginDoubleCheck()
+    {
+        return async () =>
+        {
+            SetState(GameState.LOGIN_DOUBLE_CHECK);
+            Sprite pic = ImgDirToSprite(GetProfilePicDir(loggedInName));
+            string displayName = FolderNameToLoginName(loggedInName);
+            adjuster.PicWindow(pic, "Are you sure you want to log in as " + displayName + "?", "Login", "Back");
+        };
+    }
+
+    private Func<Task> LogIn()
+    {
+        return async () =>
+        {
+            SetState(GameState.LOGGING_IN);
+            LoadProfileData(loggedInName);
+            await AuthenticateIfNecessaryThenDo(() =>
+            {
+                AddTask(GameState.WELCOME_SCREEN);
+            }, true);
+        };
+    }
+
+    private Func<Task> CancelLogin()
+    {
+        return async () =>
+        {
+            SetState(GameState.CANCELLING_LOGIN);
+            ClearQueuedData();
+            AddTask(GameState.LISTING_PROFILES);
+        };
+    }
+
+    private Func<Task> ShowWelcomeScreen()
+    {
+        return async () =>
+        {
+            SetState(GameState.WELCOME_SCREEN);
+            adjuster.PromptOKDialogue("\r\nWelcome, " + loggedInName + "!");
+        };
+    }
+
+    private Func<Task> ShowSelectedPhoto()
+    {
+        return async () =>
+        {
+            SetState(GameState.SHOWING_SELECTED_PHOTO);
+            adjuster.PicWindow(savedFrame, "Nice picture! What would you like to do with it?", "Delete it", "Keep it");
+        };
+    }
+
+    private Func<Task> DeletePhotoAsync()
+    {
+        return async () =>
+        {
+            SetState(GameState.DELETING_PHOTO);
+            await AuthenticateIfNecessaryThenDo(async () =>
+            {
+                await DeleteSelectedPhoto();
+                AddTask(GameState.LISTING_IMAGES);
+            }, true);
+        };
+    }
+
+    private Func<Task> APIError(GameState newState, string err)
+    {
+        return async () =>
+        {
+            SetState(newState);
+            adjuster.PromptOKDialogue("API Error\r\n" + err);
+        };
     }
 
     private async Task AuthenticateIfNecessaryThenDo(Action f, bool showRejectionPrompt, Sprite imgToCheck = null)
     {
-        if (!ShouldBeAuthenticated())
-        {
-            f();
-        }
-        else
-        {
-            if (await VerifyAsync(showRejectionPrompt))
+        
+            if (!ShouldBeAuthenticated())
             {
                 f();
             }
-        }
+            else
+            {
+                if (await VerifyAsync(showRejectionPrompt))
+                {
+                    f();
+                }
+            }
+        
     }
 
     private void SetState(GameState newState)
@@ -429,7 +504,7 @@ public class GameController : MonoBehaviour {
         if (persistedId == "")
         {
             AddTask(GameState.API_ERROR_ADDING_FACE);
-            Debug.LogError("API Error while trying to add Face to LargePersonGroup Person");
+            Logger.LogError("API Error while trying to add Face to LargePersonGroup Person");
             return;
         }
 
@@ -463,7 +538,7 @@ public class GameController : MonoBehaviour {
         }
         catch (Exception e)
         {
-            Debug.Log("Exception: " + e.ToString());
+            Logger.Log("Exception: " + e.ToString());
             return new Dictionary<Tuple<string, string>, string>();
         }
 
@@ -557,7 +632,7 @@ public class GameController : MonoBehaviour {
         else
         {
             AddTask(GameState.API_ERROR_DELETING_FACE);
-            Debug.LogError("API Error while trying to delete Face from LargePersonGroup Person");
+            Logger.LogError("API Error while trying to delete Face from LargePersonGroup Person");
             return;
         }
     }
@@ -606,7 +681,7 @@ public class GameController : MonoBehaviour {
         if (guesses == null)
         {
             AddTask(GameState.API_ERROR_IDENTIFYING);
-            Debug.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
+            Logger.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
             return false;
         }
 
@@ -633,7 +708,7 @@ public class GameController : MonoBehaviour {
                         if (nameFromID == "")
                         {
                             AddTask(GameState.API_ERROR_GET_NAME);
-                            Debug.LogError("API Error occurred while trying to get name from ID (after auth fail)");
+                            Logger.LogError("API Error occurred while trying to get name from ID (after auth fail)");
                             return false;
                         }
 
@@ -657,7 +732,7 @@ public class GameController : MonoBehaviour {
         string personId = profileInfo["personID"];
         if (!guesses.ContainsKey(personId))
         {
-            Debug.Log("guesses does not contain the personId");
+            Logger.Log("guesses does not contain the personId");
             return false;
         }
         else
@@ -676,12 +751,12 @@ public class GameController : MonoBehaviour {
         {
             if (status == FaceAPIHelper.TRAINING_FAILED || status == FaceAPIHelper.TRAINING_API_ERROR) {
                 AddTask(GameState.API_ERROR_TRAINING_STATUS);
-                Debug.LogError("API Error occurred when checking training status");
+                Logger.LogError("API Error occurred when checking training status");
                 return;
             }
-            Debug.Log("Checking training status...");
+            Logger.Log("Checking training status...");
             status = await apiHelper.GetTrainingStatusAsync();
-            Debug.Log("status = " + status);
+            Logger.Log("status = " + status);
         }
     }
 
@@ -757,5 +832,47 @@ public class GameController : MonoBehaviour {
         #endif
 
         return ret;
+    }
+
+    public RosManager GetRosManager()
+    {
+        return this.rosManager;
+    }
+
+    public void SetRosManager(RosManager newRos)
+    {
+        this.rosManager = newRos;
+    }
+
+    // ====================================================================
+    // All ROS message handlers.
+    // They should add tasks to the task queue, because many of their
+    // functionalities will throw errors if not run on the main thread.
+    // ====================================================================
+
+    public void RegisterRosMessageHandlers()
+    {
+        this.rosManager.RegisterHandler(FaceIDCommand.HELLO_WORLD_ACK, GameState.ROS_HELLO_WORLD_ACK);
+    }
+
+    // HELLO_WORLD_ACK
+    private void OnHelloWorldAckReceived(Dictionary<string, object> args)
+    {
+        Logger.Log("OnHelloWorldAckReceived");
+        AddTask(GameState.ROS_HELLO_WORLD_ACK);
+    }
+
+    private Func<Task> ROSHelloWorldAck()
+    {
+        return async () =>
+        {
+            ConnectionScreenController.instance.ShowContinueButton();
+            //Logger.Log("Our \"Hello World\" ping has been received and acknowledged by the ROS Gods! :D");
+            //SetState(GameState.ROS_HELLO_WORLD_ACK);
+            //SceneManager.LoadScene("Game", LoadSceneMode.Single);
+            //await Task.Delay(2000);
+            //adjuster.HideAllElements();
+            //adjuster.PromptOKDialogue("Our \"Hello World\" ping has been received and acknowledged by the ROS Gods! :D");
+        };
     }
 }

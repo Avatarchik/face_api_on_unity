@@ -63,7 +63,7 @@ public class UIAdjuster : MonoBehaviour {
         }
         else if (instance != this)
         {
-            Debug.Log("duplicate UIElementContainer, destroying");
+            Logger.Log("duplicate UIElementContainer, destroying");
             Destroy(gameObject);
         }
         DontDestroyOnLoad(gameObject);

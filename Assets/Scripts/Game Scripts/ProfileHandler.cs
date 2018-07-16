@@ -67,7 +67,7 @@ public class ProfileHandler : MonoBehaviour {
         string[] split = name.Split(':');
         if (split.Length < 2)
         {
-            Debug.LogError("incorrect naming used for clickable GameObject. Name = " + name);
+            Logger.LogError("incorrect naming used for clickable GameObject. Name = " + name);
             return;
         }
 
@@ -77,7 +77,7 @@ public class ProfileHandler : MonoBehaviour {
         {
             case "Image": controller.SelectPhoto(identifier); break;
             case "Profile": controller.LoginAreYouSure(identifier); break;
-            default: Debug.LogError("Unknown profile type! Type = " + label); break;
+            default: Logger.LogError("Unknown profile type! Type = " + label); break;
         }
     }
 }

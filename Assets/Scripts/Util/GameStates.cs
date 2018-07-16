@@ -1,8 +1,9 @@
 ﻿public enum GameState
 {
-    GAMECONTROLLER_STARTING = -1,
+    GAMECONTROLLER_STARTING = -1,   //just for debug
     
     ROS_CONNECTION = 0,
+    ROS_HELLO_WORLD_ACK = 900,
 
     STARTED = 1,
     NEW_PROFILE_PROMPT = 2,

@@ -41,7 +41,7 @@ public delegate void ReceivedMessageEventHandler(object sender, int command, obj
  * and to allow us to send back log messages
  * */
 public class RosbridgeWebSocketClient
-{/*
+{
     private string SERVER = "";
     private string PORT_NUM = null;
     public static int CONNECTION_TIMEOUT_SECONDS = 3;
@@ -108,7 +108,7 @@ public class RosbridgeWebSocketClient
         }
         catch (Exception e)
         {
-            Debug.Log(e.ToString());
+            Logger.Log(e.ToString());
         }
     }
 
@@ -122,7 +122,7 @@ public class RosbridgeWebSocketClient
         // specified server on the specified port
         try
         {
-            Debug.Log("[websocket] creating new websocket... ");
+            Logger.Log("[websocket] creating new websocket... ");
             this.clientSocket = new WebSocket(("ws://" + SERVER +
                 (PORT_NUM == null ? "" : ":" + PORT_NUM)));
 
@@ -146,7 +146,7 @@ public class RosbridgeWebSocketClient
             // OnClose event occurs when the connection has been closed
             this.clientSocket.OnClose += HandleOnClose;
 
-            Debug.Log("[websocket] connecting to websocket...");
+            Logger.Log("[websocket] connecting to websocket...");
 
             // Connect to the server
             DateTime start = DateTime.Now;
@@ -162,7 +162,7 @@ public class RosbridgeWebSocketClient
         }
         catch (Exception e)
         {
-            Debug.LogError("[websocket] Error starting websocket: " + e);
+            Logger.LogError("[websocket] Error starting websocket: " + e);
             return false;
         }
     }
@@ -175,7 +175,7 @@ public class RosbridgeWebSocketClient
     {
         try
         {
-            Debug.Log("[websocket] trying to connect to websocket...");
+            Logger.Log("[websocket] trying to connect to websocket...");
             // connect to the server
             DateTime start = DateTime.Now;
             this.clientSocket.ConnectAsync();
@@ -183,19 +183,19 @@ public class RosbridgeWebSocketClient
             {
                 if (DateTime.Now.Subtract(start).TotalSeconds > CONNECTION_TIMEOUT_SECONDS)
                 {
-                    Debug.Log("[websocket] Timed out trying to reconnect");
+                    Logger.Log("[websocket] Timed out trying to reconnect");
                     this.errorBeingHandled = false;
                     return;
                 }
             }
             this.timer.Enabled = false;
             this.errorBeingHandled = false;
-            Debug.Log("[websoceket] invoking onReconnectSuccess");
+            Logger.Log("[websoceket] invoking onReconnectSuccess");
             this.onReconnectSuccess?.Invoke();
         }
         catch (Exception e)
         {
-            Debug.LogError("[websocket] Error starting websocket: " + e);
+            Logger.LogError("[websocket] Error starting websocket: " + e);
             this.timer.Enabled = true;
         }
     }
@@ -239,7 +239,7 @@ public class RosbridgeWebSocketClient
             {
                 if (!this.errorBeingHandled)
                 {
-                    Debug.LogWarning("[websocket] Can't send message - client socket dead!"
+                    Logger.LogWarning("[websocket] Can't send message - client socket dead!"
                     + "\nWill try to reconnect to socket...");
                     this.timer.Enabled = true;
                     this.errorBeingHandled = true;
@@ -268,7 +268,7 @@ public class RosbridgeWebSocketClient
         }
         catch (Exception e)
         {
-            Debug.LogError("[websocket] ERROR: failed to send " + e.ToString());
+            Logger.LogError("[websocket] ERROR: failed to send " + e.ToString());
             return false; // fail :(
         }
     }
@@ -282,7 +282,7 @@ public class RosbridgeWebSocketClient
     void HandleOnOpen(object sender, EventArgs e)
     {
         // connection opened
-        Debug.Log("[websocket] ---- Opened WebSocket ----");
+        Logger.Log("[websocket] ---- Opened WebSocket ----");
     }
 
     /// <summary>
@@ -295,7 +295,7 @@ public class RosbridgeWebSocketClient
         // if the message is a string, we can parse it
         if (e.IsText)
         {
-            Debug.Log("[websocket] Received message: " + e.Data);
+            Logger.Log("[websocket] Received message: " + e.Data);
 
             // use rosbridge utilities to decode and parse message
             int command = -1;
@@ -315,12 +315,12 @@ public class RosbridgeWebSocketClient
         }
         else if (e.IsBinary)
         {
-            Debug.LogWarning("[websocket] Received byte array in message but we " +
+            Logger.LogWarning("[websocket] Received byte array in message but we " +
                 "were expecting a string message.");
         }
         else
         {
-            Debug.Log("[websocket] Received message of unknown type");
+            Logger.Log("[websocket] Received message of unknown type");
         }
     }
 
@@ -331,7 +331,7 @@ public class RosbridgeWebSocketClient
     /// <param name="e">E.</param>
     void HandleOnError(object sender, ErrorEventArgs e)
     {
-        Debug.LogError("[websocket] Error in websocket! " + e.Message + "\n" +
+        Logger.LogError("[websocket] Error in websocket! " + e.Message + "\n" +
             e.Exception);
 
         if (e.Message != "An error has occurred in closing the connection.")
@@ -349,7 +349,7 @@ public class RosbridgeWebSocketClient
     /// <param name="e">E.</param>
     void HandleOnClose(object sender, CloseEventArgs e)
     {
-        Debug.Log("[websocket] Websocket closed with status: " + e.Reason +
+        Logger.Log("[websocket] Websocket closed with status: " + e.Reason +
              "\nCode: " + e.Code + "\nClean close? " + e.WasClean);
 
         // Begin the timer and attempt reconnect unless it was a clean close.
@@ -375,9 +375,9 @@ public class RosbridgeWebSocketClient
     void OnTimeElapsed(object sender, System.Timers.ElapsedEventArgs e)
     {
 
-        Debug.Log("[websocket] Time elapsed, trying to reconnect...");
+        Logger.Log("[websocket] Time elapsed, trying to reconnect...");
         this.timer.Enabled = false;
         this.Reconnect();
 
-    }*/
+    }
 }

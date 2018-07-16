@@ -31,7 +31,7 @@ using UnityEngine;
 
 
 public static class RosbridgeUtilities
-{/*
+{
 	/// <summary>
 	/// Builds a JSON string message to publish over rosbridge
 	/// </summary>
@@ -124,7 +124,7 @@ public static class RosbridgeUtilities
 		data = Json.Deserialize(rosmsg) as Dictionary<string, object>;
 		if (data == null)
 		{
-			Logger.LogWarning("[decode ROS msg] Could not parse JSON message!");
+            Logger.LogWarning("[decode ROS msg] Could not parse JSON message!");
 			return;
 		}
 		// Logger.Log("[decode ROS msg] deserialized " + data.Count + " objects from JSON!");
@@ -141,7 +141,7 @@ public static class RosbridgeUtilities
 		if (!data.ContainsKey("msg") && !data.ContainsKey("topic")
 			&& !data.ContainsKey("op"))
 		{
-			Logger.LogWarning("[decode ROS msg] Did not get a valid message!");
+            Logger.LogWarning("[decode ROS msg] Did not get a valid message!");
 			return;
 		}
 
@@ -167,7 +167,7 @@ public static class RosbridgeUtilities
 			}
 			catch (Exception ex)
 			{
-				Logger.LogError("[decode ROS msg] Error! Could not get command: " + ex);
+                Logger.LogError("[decode ROS msg] Error! Could not get command: " + ex);
 			}
 		}
 
@@ -200,7 +200,7 @@ public static class RosbridgeUtilities
 			}
 			else
 			{
-				Logger.LogWarning("[decode ROS msg] Could not parse as a string either!");
+                Logger.LogWarning("[decode ROS msg] Could not parse as a string either!");
 				msgParams = "";
 			}
 			return;
@@ -299,6 +299,6 @@ public static class RosbridgeUtilities
 		// add time to header
 		header.Add("stamp", time);
 		return header;
-	}*/
+	}
 }
 

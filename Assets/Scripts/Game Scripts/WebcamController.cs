@@ -35,7 +35,7 @@ public class WebcamController : MonoBehaviour
 		// Check for device cameras
 		if (WebCamTexture.devices.Length == 0)
 		{
-			Debug.Log("No devices cameras found");
+            Logger.Log("No devices cameras found");
 			return;
 		}
 
@@ -70,7 +70,7 @@ public class WebcamController : MonoBehaviour
         }
         else
         {
-            Debug.Log("Camera texture is null!");
+            Logger.LogWarning("Camera texture is null!");
         }
     }
 
@@ -98,7 +98,6 @@ public class WebcamController : MonoBehaviour
 	// guaranteed to report correct data as soon as device camera is started
 	void Update()
 	{
-        Debug.Log("camEnabled: " + camEnabled);
         if (camEnabled)
         {
             // Skip making adjustment for incorrect camera data

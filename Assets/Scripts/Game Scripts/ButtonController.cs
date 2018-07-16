@@ -13,39 +13,39 @@ public class ButtonController : MonoBehaviour {
 
     public void OnClickYes()
     {
-        Debug.Log("Pressed Yes");
+        Logger.Log("Pressed Yes");
         switch (controller.GetGameState())
         {
             case GameState.STARTED: controller.AddTask(GameState.NEW_PROFILE_PROMPT); break;
             case GameState.NEW_PROFILE_PROMPT: controller.AddTask(GameState.ENTER_NAME_PROMPT); break;
-            default: Debug.Log("Unhandled button press! Button = Yes, game state = " + controller.GetGameState()); break;   
+            default: Logger.Log("Unhandled button press! Button = Yes, game state = " + controller.GetGameState()); break;   
         }
     }
 
     public void OnClickNo()
     {
-        Debug.Log("Pressed No");
+        Logger.Log("Pressed No");
         switch (controller.GetGameState())
         {
             case GameState.STARTED: controller.AddTask(GameState.LISTING_PROFILES); break;
             case GameState.NEW_PROFILE_PROMPT: controller.AddTask(GameState.MUST_LOGIN_PROMPT); break;
-            default: Debug.Log("Unhandled button press! Button = No, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = No, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickDoneTyping()
     {
-        Debug.Log("Pressed done");
+        Logger.Log("Pressed done");
         switch (controller.GetGameState())
         {
             case GameState.ENTER_NAME_PROMPT: controller.AddTask(GameState.EVALUATING_TYPED_NAME); break;
-            default: Debug.Log("Unhandled button press! Button = Done, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = Done, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickOK()
     {
-        Debug.Log("Pressed OK");
+        Logger.Log("Pressed OK");
         switch (controller.GetGameState())
         {
             case GameState.MUST_LOGIN_PROMPT: controller.AddTask(GameState.STARTED); break;
@@ -66,13 +66,13 @@ public class ButtonController : MonoBehaviour {
             case GameState.API_ERROR_IDENTIFYING:
             case GameState.API_ERROR_GET_NAME:
             case GameState.API_ERROR_TRAINING_STATUS: controller.AddTask(GameState.STARTED); break;
-            default: Debug.Log("Unhandled button press! Button = OK, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = OK, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickUpdate()
     {
-        Debug.Log("Pressed Update");
+        Logger.Log("Pressed Update");
         switch (controller.GetGameState())
         {
             case GameState.TAKING_WEBCAM_PIC: controller.AddTask(GameState.CHECKING_TAKEN_PIC); break;
@@ -80,13 +80,13 @@ public class ButtonController : MonoBehaviour {
             case GameState.PIC_DISAPPROVAL: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
             case GameState.LOGIN_DOUBLE_CHECK: controller.AddTask(GameState.LOGGING_IN); break;
             case GameState.SHOWING_SELECTED_PHOTO: controller.AddTask(GameState.DELETING_PHOTO); break;
-            default: Debug.Log("Unhandled button press! Button = Update, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = Update, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickCancel()
     {
-        Debug.Log("Pressed Cancel");
+        Logger.Log("Pressed Cancel");
         switch (controller.GetGameState())
         {
             case GameState.PIC_APPROVAL: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
@@ -95,47 +95,47 @@ public class ButtonController : MonoBehaviour {
             case GameState.SHOWING_SELECTED_PHOTO:
             case GameState.TAKING_WEBCAM_PIC:
             case GameState.PIC_DISAPPROVAL: controller.AddTask(GameState.LISTING_IMAGES); break;
-            default: Debug.Log("Unhandled button press! Button = Cancel, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = Cancel, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickAdd()
     {
-        Debug.Log("Pressed Add");
+        Logger.Log("Pressed Add");
         switch (controller.GetGameState())
         {
             case GameState.LISTING_IMAGES: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
-            default: Debug.Log("Unhandled button press! Button = Add, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = Add, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickLogOff()
     {
-        Debug.Log("Pressed LogOff");
+        Logger.Log("Pressed LogOff");
         switch (controller.GetGameState())
         {
             case GameState.LISTING_IMAGES: controller.AddTask(GameState.STARTED); break;
-            default: Debug.Log("Unhandled button press! Button = LogOff, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = LogOff, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickBack()
     {
-        Debug.Log("Pressed Back");
+        Logger.Log("Pressed Back");
         switch (controller.GetGameState())
         {
             case GameState.LISTING_PROFILES: controller.AddTask(GameState.STARTED); break;
-            default: Debug.Log("Unhandled button press! Button = Back, game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = Back, game state = " + controller.GetGameState()); break;
         }
     }
 
     public void OnClickCancelTyping()
     {
-        Debug.Log("Pressed Cancel (on text input window)");
+        Logger.Log("Pressed Cancel (on text input window)");
         switch (controller.GetGameState())
         {
             case GameState.ENTER_NAME_PROMPT: controller.AddTask(GameState.STARTED); break;
-            default: Debug.Log("Unhandled button press! Button = Cancel (on text input window), game state = " + controller.GetGameState()); break;
+            default: Logger.Log("Unhandled button press! Button = Cancel (on text input window), game state = " + controller.GetGameState()); break;
         }
     }
 
