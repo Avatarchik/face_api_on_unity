@@ -2319,7 +2319,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7fbfe2b572cf94fa48b8c895b7b8be7e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  brain: {fileID: 1470226543}
 --- !u!114 &1104279732
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4351,7 +4350,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5590d75d27bc14829b1ad2cfd33ba89e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  uiElementContainer: {fileID: 1104279729}
 --- !u!4 &1470226545
 Transform:
   m_ObjectHideFlags: 0

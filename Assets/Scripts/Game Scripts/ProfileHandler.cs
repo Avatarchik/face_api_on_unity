@@ -5,25 +5,24 @@ using UnityEngine;
 using UnityEngine.UI;
 
 public class ProfileHandler : MonoBehaviour {
-
-
-
-
-    public string newImagePath, newText;
-
+    
     public Image profileImage;
     public Text profileText;
 
-    public string profileID;
-
-    private GameObject brain;
+    public IScrollable item;
+    public ScrollableType type;
 
     private GameController controller;
 
     void Start()
     {
-        brain = GameObject.Find("Brain");
-        controller = brain.GetComponent<GameController>();
+        controller = GameController.instance;
+    }
+
+    public void Init()
+    {
+        this.UpdateText();
+        this.UpdateImage();
     }
 
     public void SetImgToDefault()
@@ -35,11 +34,17 @@ public class ProfileHandler : MonoBehaviour {
 
     public void UpdateImage()
     {
+        if (item.ImgPath == Constants.UNKNOWN_IMG_RSRC_PATH || item.ImgPath == "none")
+        {
+            this.SetImgToDefault();
+            return;
+        }
+
         // Create a texture. Texture size does not matter, since
         // LoadImage will replace with with incoming image size.
         Texture2D tex = new Texture2D(2, 2);
 
-        byte[] pngBytes = GetImageAsByteArray(newImagePath);
+        byte[] pngBytes = GetImageAsByteArray(item.ImgPath);
         // Load data into the texture.
         tex.LoadImage(pngBytes);
         
@@ -49,7 +54,7 @@ public class ProfileHandler : MonoBehaviour {
 
     public void UpdateText()
     {
-        profileText.text = newText;
+        profileText.text = item.DisplayName;
     }
 
     byte[] GetImageAsByteArray(string imageFilePath)
@@ -64,20 +69,26 @@ public class ProfileHandler : MonoBehaviour {
 
     public void WhenSelected()
     {
-        string[] split = name.Split(':');
-        if (split.Length < 2)
+        switch (type)
         {
-            Logger.LogError("incorrect naming used for clickable GameObject. Name = " + name);
-            return;
+            case ScrollableType.Profile: controller.SelectProfile((GameController.Profile) item); break;
+            case ScrollableType.ProfileImage: controller.SelectPhoto((GameController.ProfileImage) item); break;
+            default: Logger.LogError("Unknown ScrollableType type! Type = " + type.ToString()); break;
         }
+    }
 
-        string label = name.Split(':')[0];
-        string identifier = name.Split(':')[1].Substring(1);
-        switch (label)
-        {
-            case "Image": controller.SelectPhoto(identifier); break;
-            case "Profile": controller.LoginAreYouSure(identifier); break;
-            default: Logger.LogError("Unknown profile type! Type = " + label); break;
-        }
+    public interface IScrollable
+    {
+        string ImgPath { get; }
+
+        string DisplayName { get; }
+
+        string IdentifyingName { get; }
+    }
+
+    public enum ScrollableType
+    {
+        Profile,        // GameController.Profile
+        ProfileImage    // GameController.ProfileImage
     }
 }

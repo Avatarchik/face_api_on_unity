@@ -383,8 +383,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   input: {fileID: 1366526014}
   rosInputText: {fileID: 1366526013}
-  rosInputPlaceholder: {fileID: 1316211486}
   rosStatusText: {fileID: 1366526012}
+  rosInputPlaceholder: {fileID: 1316211486}
   rosConnectButton: {fileID: 1366526011}
   continueButton: {fileID: 1366526010}
   rosConnectButtonGrp: {fileID: 1366526009}

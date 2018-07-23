@@ -10,6 +10,9 @@ public class UIAdjuster : MonoBehaviour {
     // The singleton instance.
     public static UIAdjuster instance = null;
 
+    // unity is very anal about how its "single-threaded", so all UI stuff will now happen on a Queue...
+    private Queue<Action> taskQueue = new Queue<Action>();
+
     public Canvas questionPopUp;
     public Text questionText;
 
@@ -54,6 +57,8 @@ public class UIAdjuster : MonoBehaviour {
 
     private WebcamController webcamController;
 
+    private Sprite savedSprite;
+
     void Awake()
     {
         // Enforce singleton pattern.
@@ -70,7 +75,8 @@ public class UIAdjuster : MonoBehaviour {
     }
 
     // Use this for initialization
-    void Start () {
+    void Start ()
+    {
         questionPopUpGrp = questionPopUp.GetComponent<CanvasGroup>();
         textInputGrp = textInput.GetComponent<CanvasGroup>();
         okPopUpGrp = okPopUp.GetComponent<CanvasGroup>();
@@ -83,6 +89,30 @@ public class UIAdjuster : MonoBehaviour {
 
         webcamController = webcamDisplay.GetComponent<WebcamController>();
 	}
+
+    void Update()
+    {
+        HandleTaskQueue();
+    }
+
+    // Handle main task queue.
+    private void HandleTaskQueue()
+    {
+        // Pop tasks from the task queue and perform them.
+        // Tasks are added from other threads, usually in response to ROS msgs.
+        if (this.taskQueue.Count > 0)
+        {
+            try
+            {
+                Logger.Log("Got a task from queue in UIAdjuster");
+                this.taskQueue.Dequeue().Invoke();
+            }
+            catch (Exception e)
+            {
+                Logger.LogError("Error invoking action on main thread!\n" + e);
+            }
+        }
+    }
 
     // Modifiers for the Yes/No window:
 
@@ -221,10 +251,10 @@ public class UIAdjuster : MonoBehaviour {
         profileListText.text = s;
     }
 
-    private void UpdateProfileList(Dictionary<Tuple<string, string>, string> profiles)
+    private void UpdateProfileList(List<GameController.Profile> profiles)
     {
         ScrollableList list = profileList.GetComponent<ScrollableList>();
-        list.LoadProfiles(profiles);
+        list.DisplayProfiles(profiles);
     }
 
     // Modifiers for the Image List window:
@@ -254,10 +284,10 @@ public class UIAdjuster : MonoBehaviour {
         imageListText.text = s;
     }
 
-    private void UpdateImageList(Dictionary<Tuple<string, string>, string> profiles)
+    private void UpdateImageList(List<GameController.ProfileImage> profiles)
     {
         ScrollableList list = imageList.GetComponent<ScrollableList>();
-        list.LoadImages(profiles);
+        list.DisplayImages(profiles);
     }
     
     // Will need to turn off feed before hiding it
@@ -301,9 +331,14 @@ public class UIAdjuster : MonoBehaviour {
         updateBoxImg.sprite = newImg;
     }
 
-    public Sprite GrabCurrentWebcamFrame()
+    public void GrabCurrentWebcamFrame()
     {
-        return webcamController.GetFrame();
+        savedSprite = webcamController.GetFrame();
+    }
+
+    public Sprite GetCurrentSavedFrame()
+    {
+        return savedSprite;
     }
 
     private void SetUpdateButtonText(string changed)
@@ -316,7 +351,7 @@ public class UIAdjuster : MonoBehaviour {
         cancelText.text = changed;
     }
 
-    public void HideAllElements()
+    private void HideAllElements()
     {
         this.HideOKPopUp();
         this.HideImageList();
@@ -329,108 +364,131 @@ public class UIAdjuster : MonoBehaviour {
         this.HideUpdateCancelPopUp();
     }
 
-    public void AskQuestion(string q)
+    public void HideAllElementsAction()
     {
-        //hide everything not in use
-        this.HideAllElements();
-
-        //change values
-        this.SetQuestionPopUpText(q);
-
-        //show the window after changes are made
-        this.ShowQuestionPopUp();
+        this.taskQueue.Enqueue(() => {
+            this.HideAllElements();
+        });
     }
 
-    public void PromptInputText(string prompt)
+    public void AskQuestionAction(string q)
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetTextInputPrompt(prompt);
+            //change values
+            this.SetQuestionPopUpText(q);
 
-        //show the window after changes are made
-        this.ShowTextInput();
+            //show the window after changes are made
+            this.ShowQuestionPopUp();
+        });
     }
 
-    public void PromptOKDialogue(string prompt)
+    public void PromptInputTextAction(string prompt)
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetOKPopUpText(prompt);
+            //change values
+            this.SetTextInputPrompt(prompt);
 
-        //show the window after changes are made
-        this.ShowOKPopUp();
+            //show the window after changes are made
+            this.ShowTextInput();
+        });
     }
 
-    public void ListProfiles(string prompt, Dictionary<Tuple<string, string>, string> profiles)
+    public void PromptOKDialogueAction(string prompt)
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetProfileListText(prompt);
-        this.UpdateProfileList(profiles);
+            //change values
+            this.SetOKPopUpText(prompt);
 
-        //show the window after changes are made
-        this.ShowProfileList(true);
+            //show the window after changes are made
+            this.ShowOKPopUp();
+        });
     }
 
-    public void ListImages(string prompt, Dictionary<Tuple<string, string>, string> profiles)
+    public void ListProfilesAction(string prompt, List<GameController.Profile> profiles)
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetImageListText(prompt);
-        this.UpdateImageList(profiles);
+            //change values
+            this.SetProfileListText(prompt);
+            this.UpdateProfileList(profiles);
 
-        //show the window after changes are made
-        this.ShowImageList(true);
+            //show the window after changes are made
+            this.ShowProfileList(true);
+        });
     }
 
-    public void ShowWebcam(string prompt, string updateText = "Update", string cancelText = "Cancel")
+    public void ListImagesAction(string prompt, List<GameController.ProfileImage> profiles)
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetUpdateCancelPopUpText(prompt);
-        this.SetUpdateButtonText(updateText);
-        this.SetCancelButtonText(cancelText);
+            //change values
+            this.SetImageListText(prompt);
+            this.UpdateImageList(profiles);
 
-        //show the window after changes are made
-        this.ShowUpdateCancelButtonPopUp();
-        this.ShowCameraFeed();
+            //show the window after changes are made
+            this.ShowImageList(true);
+        });
     }
 
-    public void PicWindow(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel")
+    public void ShowWebcamAction(string prompt, string updateText = "Update", string cancelText = "Cancel")
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetUpdateCancelPopUpText(prompt);
-        this.SetUpdateButtonText(updateText);
-        this.SetCancelButtonText(cancelText);
-        this.ChangeUpdateImage(pic);
+            //change values
+            this.SetUpdateCancelPopUpText(prompt);
+            this.SetUpdateButtonText(updateText);
+            this.SetCancelButtonText(cancelText);
 
-        //show the window after changes are made
-        this.ShowUpdateCancelButtonPopUp();
-        this.ShowUpdateImage();
+            //show the window after changes are made
+            this.ShowUpdateCancelButtonPopUp();
+            this.ShowCameraFeed();
+        });
     }
 
-    public void PromptNoButtonPopUp(string prompt)
+    public void PicWindowAction(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel")
     {
-        //hide everything not in use
-        this.HideAllElements();
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
 
-        //change values
-        this.SetNoButtonPopUpText(prompt);
+            //change values
+            this.SetUpdateCancelPopUpText(prompt);
+            this.SetUpdateButtonText(updateText);
+            this.SetCancelButtonText(cancelText);
+            this.ChangeUpdateImage(pic);
 
-        //show the window after changes are made
-        this.ShowNoButtonPopUp();
+            //show the window after changes are made
+            this.ShowUpdateCancelButtonPopUp();
+            this.ShowUpdateImage();
+        });
+    }
+
+    public void PromptNoButtonPopUpAction(string prompt)
+    {
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
+
+            //change values
+            this.SetNoButtonPopUpText(prompt);
+
+            //show the window after changes are made
+            this.ShowNoButtonPopUp();
+        });
     }
 }

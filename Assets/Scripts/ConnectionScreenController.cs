@@ -50,7 +50,7 @@ public class ConnectionScreenController : MonoBehaviour {
     {
         gameObject.SetActive(false);
         gameController.AddTask(GameState.STARTED);
-        SceneManager.LoadScene("Game", LoadSceneMode.Single);
+        SceneManager.LoadScene(Constants.UNITY_GAME_SCENE, LoadSceneMode.Single);
     }
 
     public void OnROSConnectClick()
