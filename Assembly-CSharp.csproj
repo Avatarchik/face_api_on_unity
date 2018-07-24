@@ -75,6 +75,7 @@
     <Compile Include="Assets\Scripts\Util\Constants.cs" />
     <Compile Include="Assets\Scripts\Util\GameStates.cs" />
     <Compile Include="Assets\Scripts\Util\Logger.cs" />
+    <Compile Include="Assets\Scripts\Util\Util.cs" />
     <None Include="Assets\Resources\api_access_key.txt" />
     <Reference Include="UnityEditor.StandardEvents">
       <HintPath>/Users/yaseen/Documents/GitHub/face_recognition_unity/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>

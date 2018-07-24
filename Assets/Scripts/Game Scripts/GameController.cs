@@ -52,8 +52,7 @@ public class GameController : MonoBehaviour {
     void Start()
     {
         adjuster = UIAdjuster.instance;
-        TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
-        apiHelper = new FaceAPIHelper(api_access_key.text, Constants.PERSON_GROUP_ID);
+        apiHelper = new FaceAPIHelper(Constants.API_ACCESS_KEY, Constants.PERSON_GROUP_ID);
         InitCommandDict();
 
         //SetState(GameState.GAMECONTROLLER_STARTING);
@@ -241,8 +240,10 @@ public class GameController : MonoBehaviour {
                 else
                 {
                     adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (creating LargePersonGroup Person)");
-                    string personID = await apiHelper.CreatePersonAsync(typedName);
-                    if (personID != "") //successful API call
+                    FaceAPICall<string> apiCall = apiHelper.CreateLargePersonGroupPersonCall(typedName);
+                    await MakeRequestAndSendInfoToROS(apiCall);
+                    string personID = apiCall.GetResult();
+                    if (apiCall.SuccessfulCall() && personID != "") //successful API call
                     {
                         CreateProfile(typedName, personID, true);
                     }
@@ -295,8 +296,11 @@ public class GameController : MonoBehaviour {
                 adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (counting faces in image)");
                 byte[] imgData = frame.texture.EncodeToPNG();
 
-                int numFaces = await apiHelper.CountFacesAsync(imgData);
-                if (numFaces == -1)
+                FaceAPICall<int> apiCall = apiHelper.CountFacesCall(imgData);
+                await MakeRequestAndSendInfoToROS(apiCall);
+
+                int numFaces = apiCall.GetResult();
+                if (!apiCall.SuccessfulCall() || numFaces == -1)
                 {
                     AddTask(GameState.API_ERROR_COUNTING_FACES);
                     Logger.LogError("API Error occurred while trying to count the faces in a frame");
@@ -709,9 +713,13 @@ public class GameController : MonoBehaviour {
         Texture2D tex = img.texture;
         byte[] imgData = tex.EncodeToPNG();
 
-        string persistedId = await apiHelper.AddFaceAsync(profile.personId, imgData);
+        FaceAPICall<string> call = apiHelper.AddFaceToLargePersonGroupPersonCall(profile.personId, imgData);
 
-        if (persistedId == "")
+        await MakeRequestAndSendInfoToROS(call);
+
+        string persistedId = call.GetResult();
+
+        if (!call.SuccessfulCall() || persistedId == "")
         {
             AddTask(GameState.API_ERROR_ADDING_FACE);
             Logger.LogError("API Error while trying to add Face to LargePersonGroup Person");
@@ -921,9 +929,12 @@ public class GameController : MonoBehaviour {
 
         adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (deleting Face from LargePersonGroup Person)");
 
-        bool deleted = await apiHelper.DeleteFaceAsync(person.personId, persistedId);
+        FaceAPICall<bool> apiCall = apiHelper.DeleteFaceFromLargePersonGroupPersonCall(person.personId, persistedId);
+        await MakeRequestAndSendInfoToROS(apiCall);
 
-        if (deleted)
+        bool deleted = apiCall.GetResult();
+
+        if (apiCall.SuccessfulCall() && deleted)
         {
             person.images.Remove(photo);
             ExportProfileInfo(person);
@@ -963,9 +974,27 @@ public class GameController : MonoBehaviour {
         adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (identifying faces in current frame)");
         byte[] frameData = frame.texture.EncodeToPNG();
 
-        Dictionary<string, decimal> guesses = await apiHelper.IdentifyBiggestInImageAsync(frameData);
+        // 2 calls: Face - Detect and then Face - Identify
 
-        if (guesses == null)
+        FaceAPICall<List<string>> detectAPICall = apiHelper.DetectForIdentifyingCall(frameData);
+        await MakeRequestAndSendInfoToROS(detectAPICall);
+        List<string> faceIds = detectAPICall.GetResult();
+
+        if (!detectAPICall.SuccessfulCall() || faceIds == null)
+        {
+            AddTask(GameState.API_ERROR_IDENTIFYING);
+            Logger.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
+            return false;
+        }
+
+        string biggestFaceId = faceIds[0];
+
+        FaceAPICall<Dictionary<string, decimal>> identifyAPICall = apiHelper.IdentifyFromFaceIdCall(biggestFaceId);
+        await MakeRequestAndSendInfoToROS(identifyAPICall);
+
+        Dictionary<string, decimal> guesses = identifyAPICall.GetResult();
+
+        if (!identifyAPICall.SuccessfulCall() || guesses == null)
         {
             AddTask(GameState.API_ERROR_IDENTIFYING);
             Logger.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
@@ -1010,17 +1039,24 @@ public class GameController : MonoBehaviour {
     private async Task<bool> RetrainProfilesAsync()
     {
         adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (re-training profiles)");
-        await apiHelper.StartTrainingAsync();
-        string status = await apiHelper.GetTrainingStatusAsync();
+        FaceAPICall<bool> startTrainingAPICall = apiHelper.StartTrainingLargePersonGroupCall();
+        await MakeRequestAndSendInfoToROS(startTrainingAPICall);
+
+        FaceAPICall<string> trainingStatusAPICall = apiHelper.GetLargePersonGroupTrainingStatusCall();
+        await MakeRequestAndSendInfoToROS(trainingStatusAPICall);
+
+        string status = trainingStatusAPICall.GetResult();
         while (status != FaceAPIHelper.TRAINING_SUCCEEDED)
         {
-            if (status == FaceAPIHelper.TRAINING_FAILED || status == FaceAPIHelper.TRAINING_API_ERROR) {
+            if (status == FaceAPIHelper.TRAINING_FAILED || status == FaceAPIHelper.TRAINING_API_ERROR || !trainingStatusAPICall.SuccessfulCall()) {
                 AddTask(GameState.API_ERROR_TRAINING_STATUS);
                 Logger.LogError("API Error occurred when checking training status");
                 return false;
             }
             Logger.Log("Checking training status...");
-            status = await apiHelper.GetTrainingStatusAsync();
+            trainingStatusAPICall = apiHelper.GetLargePersonGroupTrainingStatusCall();
+            await MakeRequestAndSendInfoToROS(trainingStatusAPICall);
+            status = trainingStatusAPICall.GetResult();
             Logger.Log("status = " + status);
         }
         return true;
@@ -1098,6 +1134,12 @@ public class GameController : MonoBehaviour {
         #endif
 
         return ret;
+    }
+
+    public static string DetermineAPIAccessKey()
+    {
+        TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
+        return api_access_key.text;
     }
 
     public RosManager GetRosManager()
@@ -1246,6 +1288,33 @@ public class GameController : MonoBehaviour {
             ret += "\r\nnumber: " + number;
             return ret;
         }
+    }
+
+    public async Task MakeRequestAndSendInfoToROS<T>(FaceAPICall<T> call)
+    {
+        // TODO: make a library for face_msgs, which is used by the API library and by this unity game
+        // then this struct conversion would be a lot cleaner...
+
+        UnityFaceIDHelper.FaceAPIRequest libReq = call.request;
+        FaceAPIRequest request = new FaceAPIRequest
+        {
+            request_method = (FaceAPIReqMethod)libReq.request_method,
+            request_type = (FaceAPIReqType)libReq.request_type,
+            content_type = (libReq.content_type == ContentType.CONTENT_STREAM) ? FaceAPIReqContentType.CONTENT_STREAM : FaceAPIReqContentType.CONTENT_JSON,
+            request_parameters = libReq.request_parameters,
+            request_body = libReq.request_body
+        };
+        rosManager.SendFaceAPIRequestAction(request);
+
+        await call.MakeCallAsync();
+
+        UnityFaceIDHelper.FaceAPIResponse libResp = call.response;
+        FaceAPIResponse response = new FaceAPIResponse
+        {
+            response_type = (FaceAPIRespType) libResp.response_type,
+            response = libResp.response
+        };
+        rosManager.SendFaceAPIResponseAction(response);
     }
                             
 }

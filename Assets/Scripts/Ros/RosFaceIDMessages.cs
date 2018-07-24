@@ -28,6 +28,122 @@ public struct FaceIDState
     public int sessionNum;
 }
 
+public struct FaceAPIRequest
+{
+    public static readonly string app = Constants.FACE_MSGS_APP_NAME;
+    public static readonly string location = Constants.FACE_MSGS_LOCATION;
+    public static readonly string api_subscription_key = Util.ReadJsonParamFromStr(Constants.API_ACCESS_KEY, "subscriptionKey");
+
+    public FaceAPIReqMethod request_method;
+    public FaceAPIReqType request_type;
+    public FaceAPIReqContentType content_type;
+    public string request_parameters;
+    public byte[] request_body;
+}
+
+public struct FaceAPIResponse
+{
+    public static readonly string app = Constants.FACE_MSGS_APP_NAME;
+    public FaceAPIRespType response_type;
+    public string response;
+}
+
+public enum FaceAPIReqMethod
+{
+    HTTP_POST = 0,
+    HTTP_PUT = 1,
+    HTTP_DELETE = 2,
+    HTTP_GET = 3,
+    HTTP_PATCH = 4
+}
+
+public enum FaceAPIReqContentType
+{
+    CONTENT_JSON,
+    CONTENT_STREAM
+}
+
+public enum FaceAPIReqType
+{
+    FACE_DETECT = 0,
+    FACE_FINDSIMILAR = 1,
+    FACE_GROUP = 2,
+    FACE_IDENTIFY = 3,
+    FACE_VERIFY = 4,
+
+    FACELIST_ADDFACE = 5,
+    FACELIST_CREATE = 6,
+    FACELIST_DELETE = 7,
+    FACELIST_DELETEFACE = 8,
+    FACELIST_GET = 9,
+    FACELIST_LIST = 10,
+    FACELIST_UPDATE = 11,
+
+    LARGEFACELIST_ADDFACE = 12,
+    LARGEFACELIST_CREATE = 13,
+    LARGEFACELIST_DELETE = 14,
+    LARGEFACELIST_DELETEFACE = 15,
+    LARGEFACELIST_GET = 16,
+    LARGEFACELIST_GETFACE = 17,
+    LARGEFACELIST_GETTRAININGSTATUS = 18,
+    LARGEFACELIST_LIST = 19,
+    LARGEFACELIST_LISTFACE = 20,
+    LARGEFACELIST_TRAIN = 21,
+    LARGEFACELIST_UPDATE = 22,
+    LARGEFACELIST_UPDATEFACE = 23,
+
+    LARGEPERSONGROUP_CREATE = 24,
+    LARGEPERSONGROUP_DELETE = 25,
+    LARGEPERSONGROUP_GET = 26,
+    LARGEPERSONGROUP_GETTRAININGSTATUS = 27,
+    LARGEPERSONGROUP_LIST = 28,
+    LARGEPERSONGROUP_TRAIN = 29,
+    LARGEPERSONGROUP_UPDATE = 30,
+
+    LARGEPERSONGROUPPERSON_ADDFACE = 31,
+    LARGEPERSONGROUPPERSON_CREATE = 32,
+    LARGEPERSONGROUPPERSON_DELETE = 33,
+    LARGEPERSONGROUPPERSON_DELETEFACE = 34,
+    LARGEPERSONGROUPPERSON_GET = 35,
+    LARGEPERSONGROUPPERSON_GETFACE = 36,
+    LARGEPERSONGROUPPERSON_LIST = 37,
+    LARGEPERSONGROUPPERSON_UPDATE = 38,
+    LARGEPERSONGROUPPERSON_UPDATEFACE = 39,
+
+    PERSONGROUP_CREATE = 40,
+    PERSONGROUP_DELETE = 41,
+    PERSONGROUP_GET = 42,
+    PERSONGROUP_GETTRAININGSTATUS = 43,
+    PERSONGROUP_LIST = 44,
+    PERSONGROUP_TRAIN = 45,
+    PERSONGROUP_UPDATE = 46,
+
+    PERSONGROUPPERSON_ADDFACE = 47,
+    PERSONGROUPPERSON_CREATE = 48,
+    PERSONGROUPPERSON_DELETE = 49,
+    PERSONGROUPPERSON_DELETEFACE = 50,
+    PERSONGROUPPERSON_GET = 51,
+    PERSONGROUPPERSON_GETFACE = 52,
+    PERSONGROUPPERSON_LIST = 53,
+    PERSONGROUPPERSON_UPDATE = 54,
+    PERSONGROUPPERSON_UPDATEFACE = 55
+}
+
+public enum FaceAPIRespType
+{
+    RSP_200_SUCCESS_GENERAL = 200,
+    RSP_202_SUCCESS_TRAINING = 202,
+
+    RSP_400_FAIL_ARGUMENT = 400,
+    RSP_401_FAIL_SUBKEY = 401,
+    RSP_403_FAIL_QUOTA = 403,
+    RSP_404_FAIL_NOTFOUND = 404,
+    RSP_408_FAIL_TIMEOUT = 408,
+    RSP_409_FAIL_RESOURCECONFLICT = 409,
+    RSP_415_FAIL_UNSUPPORTEDMEDIA = 415,
+    RSP_429_FAIL_RATELIMIT = 429
+}
+
 // Messages from the storybook to the controller.
 /*public enum StorybookEventType {
     HELLO_WORLD = 0,

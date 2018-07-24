@@ -108,7 +108,7 @@ public class RosbridgeWebSocketClient
         }
         catch (Exception e)
         {
-            Logger.Log(e.ToString());
+            Logger.LogError(e.ToString());
         }
     }
 

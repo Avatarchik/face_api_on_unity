@@ -9,7 +9,8 @@ using System.Threading;
 using System.Collections.Generic;
 using MiniJSON;
 
-public class RosManager {
+public class RosManager
+{
     
     private readonly GameController gameController; // Keep a reference to the game controller.
     private readonly RosbridgeWebSocketClient rosClient;
@@ -76,14 +77,20 @@ public class RosManager {
         string eventPubMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
             Constants.FACEID_EVENT_TOPIC, Constants.FACEID_EVENT_MESSAGE_TYPE);
         string statePubMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
-            Constants.FACEID_STATE_TOPIC, Constants.FACEID_STATE_MESSAGE_TYPE);   
+            Constants.FACEID_STATE_TOPIC, Constants.FACEID_STATE_MESSAGE_TYPE);
+        string apiRequestMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
+            Constants.FACEAPIREQUEST_TOPIC, Constants.FACEAPIREQUEST_MESSAGE_TYPE);
+        string apiResponseMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
+            Constants.FACEAPIRESPONSE_TOPIC, Constants.FACEAPIRESPONSE_MESSAGE_TYPE);
         string subMessage = RosbridgeUtilities.GetROSJsonSubscribeMsg(
             Constants.FACEID_COMMAND_TOPIC, Constants.FACEID_COMMAND_MESSAGE_TYPE);
 
         // Send all advertisements to publish and subscribe to appropriate channels.
         this.connected = this.rosClient.SendMessage(eventPubMessage) &&
             this.rosClient.SendMessage(statePubMessage) &&
-            this.rosClient.SendMessage(subMessage);
+            this.rosClient.SendMessage(subMessage) &&
+            this.rosClient.SendMessage(apiRequestMessage) &&
+            this.rosClient.SendMessage(apiResponseMessage);
     }
 
     private void OnMessageReceived(object sender, int cmd, object properties) {
@@ -168,5 +175,67 @@ public class RosManager {
         if (!success) {
             // Logger.Log("Failed to send FaceIDState message: " + Json.Serialize((publish)));
         }       
+    }
+
+    // Send a message representing a FaceAPI Request to the controller.
+    // Sends until success, in a new thread.
+    public void SendFaceAPIRequestAction(FaceAPIRequest apiRequest)
+    {
+        Thread thread = new Thread(() => {
+            Dictionary<string, object> publish = new Dictionary<string, object>();
+            publish.Add("topic", Constants.FACEAPIREQUEST_TOPIC);
+            publish.Add("op", "publish");
+
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("header", RosbridgeUtilities.GetROSHeader());
+            data.Add("app", FaceAPIRequest.app);
+            data.Add("location", FaceAPIRequest.location);
+            data.Add("api_subscription_key", FaceAPIRequest.api_subscription_key);
+            data.Add("request_method", (byte)apiRequest.request_method);
+            data.Add("request_type", (byte)apiRequest.request_type);
+
+            string content_type = (apiRequest.content_type == FaceAPIReqContentType.CONTENT_JSON) ? "application/json" : 
+                (apiRequest.content_type == FaceAPIReqContentType.CONTENT_STREAM) ? "application/octet-stream" : "unknown";
+            data.Add("content_type", content_type);
+            data.Add("request_parameters", apiRequest.request_parameters);
+            data.Add("request_body", apiRequest.request_body);
+
+            publish.Add("msg", data);
+            Logger.Log("Sending FaceAPIRequest ROS message: " + Json.Serialize(publish));
+            bool sent = false;
+            while (!sent)
+            {
+                sent = this.rosClient.SendMessage(Json.Serialize(publish));
+            }
+            Logger.Log("Successfully sent FaceAPIRequest ROS message.");
+        });
+        thread.Start();
+    }
+
+    // Send a message representing a FaceAPI Response to the controller.
+    // Sends until success, in a new thread.
+    public void SendFaceAPIResponseAction(FaceAPIResponse apiResponse)
+    {
+        Thread thread = new Thread(() => {
+            Dictionary<string, object> publish = new Dictionary<string, object>();
+            publish.Add("topic", Constants.FACEAPIRESPONSE_TOPIC);
+            publish.Add("op", "publish");
+
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("header", RosbridgeUtilities.GetROSHeader());
+            data.Add("app", FaceAPIResponse.app);
+            data.Add("response_type", (short)apiResponse.response_type);
+            data.Add("response", apiResponse.response);
+
+            publish.Add("msg", data);
+            Logger.Log("Sending FaceAPIResponse ROS message: " + Json.Serialize(publish));
+            bool sent = false;
+            while (!sent)
+            {
+                sent = this.rosClient.SendMessage(Json.Serialize(publish));
+            }
+            Logger.Log("Successfully sent FaceAPIResponse ROS message.");
+        });
+        thread.Start();
     }
 }
