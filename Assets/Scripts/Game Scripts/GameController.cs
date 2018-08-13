@@ -11,6 +11,9 @@ using UnityEngine.SceneManagement;
 using UnityFaceIDHelper;
 using MiniJSON;
 using Newtonsoft.Json.Linq;
+using Messages;
+using Messages.face_msgs;
+using Messages.face_id_app_msgs;
 
 public class GameController : MonoBehaviour {
     
@@ -1292,28 +1295,12 @@ public class GameController : MonoBehaviour {
 
     public async Task MakeRequestAndSendInfoToROS<T>(FaceAPICall<T> call)
     {
-        // TODO: make a library for face_msgs, which is used by the API library and by this unity game
-        // then this struct conversion would be a lot cleaner...
-
-        UnityFaceIDHelper.FaceAPIRequest libReq = call.request;
-        FaceAPIRequest request = new FaceAPIRequest
-        {
-            request_method = (FaceAPIReqMethod)libReq.request_method,
-            request_type = (FaceAPIReqType)libReq.request_type,
-            content_type = (libReq.content_type == ContentType.CONTENT_STREAM) ? FaceAPIReqContentType.CONTENT_STREAM : FaceAPIReqContentType.CONTENT_JSON,
-            request_parameters = libReq.request_parameters,
-            request_body = libReq.request_body
-        };
+        FaceAPIRequest request = call.request;
         rosManager.SendFaceAPIRequestAction(request);
 
         await call.MakeCallAsync();
 
-        UnityFaceIDHelper.FaceAPIResponse libResp = call.response;
-        FaceAPIResponse response = new FaceAPIResponse
-        {
-            response_type = (FaceAPIRespType) libResp.response_type,
-            response = libResp.response
-        };
+        FaceAPIResponse response = call.response;
         rosManager.SendFaceAPIResponseAction(response);
     }
                             
