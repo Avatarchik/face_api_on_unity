@@ -1,8 +1,0 @@
-<<<<<<< HEAD
-sceneSetups: []
-=======
-sceneSetups:
-- path: Assets/_Scenes/Game.unity
-  isLoaded: 1
-  isActive: 1
->>>>>>> parent of ec15774... Update .gitignore
