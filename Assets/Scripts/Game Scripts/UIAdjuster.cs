@@ -23,6 +23,8 @@ public class UIAdjuster : MonoBehaviour {
     public Canvas okPopUp;
     public Text okDialogueText;
 
+    public Image noButtonImage;
+
     public Canvas noButtonPopUp;
     public Text noButtonText;
 
@@ -54,6 +56,7 @@ public class UIAdjuster : MonoBehaviour {
     private CanvasGroup imageListGrp;
     private CanvasGroup cameraFeedGrp;
     private CanvasGroup updateImgGrp;
+    private CanvasGroup objectImgGrp;
 
     private WebcamController webcamController;
 
@@ -86,6 +89,7 @@ public class UIAdjuster : MonoBehaviour {
         imageListGrp = imageListWindow.GetComponent<CanvasGroup>();
         cameraFeedGrp = cameraFeed.GetComponent<CanvasGroup>();
         updateImgGrp = updateBoxImg.GetComponent<CanvasGroup>();
+        objectImgGrp = noButtonImage.GetComponent<CanvasGroup>();
 
         webcamController = webcamDisplay.GetComponent<WebcamController>();
 	}
@@ -203,6 +207,45 @@ public class UIAdjuster : MonoBehaviour {
         noButtonText.text = s;
     }
 
+    private void SetNoButtonPopUpColor(Color c)
+    {
+        // get reference of the UI element
+        GameObject panel = this.noButtonPopUp.gameObject.transform.GetChild(0).gameObject;
+
+        Image img = panel.GetComponent<Image>();
+        img.color = c;
+    }
+
+    private void HideTrainingObjectImage()
+    {
+        objectImgGrp.alpha = 0;
+        noButtonImage.gameObject.SetActive(false);
+    }
+
+    private void ShowTrainingObjectImage()
+    {
+        objectImgGrp.alpha = 1;
+        noButtonImage.gameObject.SetActive(true);
+    }
+
+    private void ChangeTrainingObjectImage(Sprite newImg, Vector3 location)
+    {
+        noButtonImage.sprite = newImg;
+
+        RectTransform rt = noButtonImage.gameObject.GetComponent<RectTransform>();
+        rt.position = location;
+    }
+
+    private void SetNoButtonPopUpObject(Sprite img, Vector3 location)
+    {
+        this.HideTrainingObjectImage();
+        if (img != null)
+        {
+            this.ChangeTrainingObjectImage(img, location);
+        }
+        this.ShowTrainingObjectImage();
+    }
+
     // Modifiers for the Webcam/Image window:
 
     private void HideUpdateCancelPopUp()
@@ -251,10 +294,10 @@ public class UIAdjuster : MonoBehaviour {
         profileListText.text = s;
     }
 
-    private void UpdateProfileList(List<GameController.Profile> profiles)
+    private void UpdateProfileList(List<GameController.Profile> profiles, int columns=0)
     {
         ScrollableList list = profileList.GetComponent<ScrollableList>();
-        list.DisplayProfiles(profiles);
+        list.DisplayProfiles(profiles, columns);
     }
 
     // Modifiers for the Image List window:
@@ -351,6 +394,26 @@ public class UIAdjuster : MonoBehaviour {
         cancelText.text = changed;
     }
 
+    private void SetProfileListBackButtonState(bool status)
+    {
+        // get references of the UI elements
+        GameObject panel = this.profileListWindow.gameObject.transform.GetChild(0).gameObject;
+        
+        GameObject backBtn = panel.transform.GetChild(0).gameObject;
+        GameObject listContainer = panel.transform.GetChild(2).gameObject;
+        GameObject scrollBar = panel.gameObject.transform.GetChild(3).gameObject;
+
+        // hide/show the button
+        backBtn.SetActive(status);
+
+        // change size of the list window + scrollbar
+        RectTransform rtL = listContainer.GetComponent<RectTransform>();
+        rtL.anchorMin = new Vector2(rtL.anchorMin.x, status ? 0.35f : 0.15f);
+
+        RectTransform rtSb = scrollBar.GetComponent<RectTransform>();
+        rtSb.anchorMin = new Vector2(rtSb.anchorMin.x, status ? 0.35f : 0.15f);
+    }
+
     private void HideAllElements()
     {
         this.HideOKPopUp();
@@ -413,7 +476,7 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void ListProfilesAction(string prompt, List<GameController.Profile> profiles)
+    public void ListProfilesAction(string prompt, List<GameController.Profile> profiles, bool backButton=true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
@@ -422,6 +485,7 @@ public class UIAdjuster : MonoBehaviour {
             //change values
             this.SetProfileListText(prompt);
             this.UpdateProfileList(profiles);
+            this.SetProfileListBackButtonState(backButton);
 
             //show the window after changes are made
             this.ShowProfileList(true);
@@ -486,8 +550,25 @@ public class UIAdjuster : MonoBehaviour {
 
             //change values
             this.SetNoButtonPopUpText(prompt);
+            this.SetNoButtonPopUpColor(Color.blue);
+            this.SetNoButtonPopUpObject(null, new Vector2());
 
             //show the window after changes are made
+            this.ShowNoButtonPopUp();
+        });
+    }    
+
+    public void ShowObjectOnScreenAction(Sprite img, Vector2 location, Color color)
+    {
+        this.taskQueue.Enqueue(() => {
+            //hide everything not in use
+            this.HideAllElements();
+
+            //change values
+            this.SetNoButtonPopUpText("");
+            this.SetNoButtonPopUpColor(color);
+            this.SetNoButtonPopUpObject(img, location);
+
             this.ShowNoButtonPopUp();
         });
     }

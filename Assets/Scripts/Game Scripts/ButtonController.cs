@@ -19,8 +19,8 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed Yes");
         switch (controller.GetGameState())
         {
-            case GameState.STARTED: controller.AddTask(GameState.NEW_PROFILE_PROMPT); break;
-            case GameState.NEW_PROFILE_PROMPT: controller.AddTask(GameState.ENTER_NAME_PROMPT); break;
+            //case GameState.STARTED: controller.AddTask(GameState.NEW_PROFILE_PROMPT); break;
+            //case GameState.NEW_PROFILE_PROMPT: controller.AddTask(GameState.ENTER_NAME_PROMPT); break;
             default: Logger.LogWarning("Unhandled button press! Button = Yes, game state = " + controller.GetGameState()); break;   
         }
     }
@@ -31,7 +31,7 @@ public class ButtonController : MonoBehaviour {
         switch (controller.GetGameState())
         {
             case GameState.STARTED: controller.AddTask(GameState.LISTING_PROFILES); break;
-            case GameState.NEW_PROFILE_PROMPT: controller.AddTask(GameState.MUST_LOGIN_PROMPT); break;
+            //case GameState.NEW_PROFILE_PROMPT: controller.AddTask(GameState.MUST_LOGIN_PROMPT); break;
             default: Logger.LogWarning("Unhandled button press! Button = No, game state = " + controller.GetGameState()); break;
         }
     }
@@ -41,7 +41,7 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed done");
         switch (controller.GetGameState())
         {
-            case GameState.ENTER_NAME_PROMPT:
+          /*case GameState.ENTER_NAME_PROMPT:
                 string typed = adjuster.GetTypedInput();
 
                 parameters = new Dictionary<string, object>
@@ -50,7 +50,7 @@ public class ButtonController : MonoBehaviour {
                 };
 
                 controller.AddTask(GameState.EVALUATING_TYPED_NAME, parameters);
-                break;
+                break;*/
             default: Logger.LogWarning("Unhandled button press! Button = Done, game state = " + controller.GetGameState()); break;
         }
     }
@@ -60,13 +60,14 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed OK");
         switch (controller.GetGameState())
         {
-            case GameState.MUST_LOGIN_PROMPT: controller.AddTask(GameState.STARTED); break;
+            // old (commented): 
+            //case GameState.MUST_LOGIN_PROMPT: controller.AddTask(GameState.STARTED); break;
 
-            case GameState.WELCOME_SCREEN: controller.AddTask(GameState.LISTING_IMAGES); break;
-            case GameState.TAKING_WEBCAM_PIC: controller.AddTask(GameState.STARTED); break;
+            //case GameState.WELCOME_SCREEN: controller.AddTask(GameState.LISTING_IMAGES); break;
+            //case GameState.TAKING_WEBCAM_PIC: controller.AddTask(GameState.STARTED); break;
 
             // cases in which user is rejected by the Identify call
-            case GameState.REJECTION_PROMPT: controller.AddTask(GameState.STARTED); break;
+            //case GameState.REJECTION_PROMPT: controller.AddTask(GameState.STARTED); break;
 
             // current solution when receiving an API error: start over and hope it goes away :P
             case GameState.API_ERROR_CREATE: 
@@ -85,7 +86,17 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed Update");
         switch (controller.GetGameState())
         {
-            case GameState.TAKING_WEBCAM_PIC:
+            case GameState.LOGIN_DOUBLE_CHECK:
+
+                parameters = new Dictionary<string, object>
+                {
+                    { "profile", controller.GetSelectedProfile() }
+                };
+
+                controller.AddTask(GameState.LOGGING_IN, parameters);
+                break;
+            // old (commented): 
+          /*case GameState.TAKING_WEBCAM_PIC:
 
                 adjuster.GrabCurrentWebcamFrame();
 
@@ -126,7 +137,7 @@ public class ButtonController : MonoBehaviour {
                 };
 
                 controller.AddTask(GameState.DELETING_PHOTO, parameters);
-                break;
+                break;*/
             default: Logger.LogWarning("Unhandled button press! Button = Update, game state = " + controller.GetGameState()); break;
         }
     }
@@ -136,12 +147,12 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed Cancel");
         switch (controller.GetGameState())
         {
-            case GameState.PIC_APPROVAL: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
+            //case GameState.PIC_APPROVAL: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
             case GameState.LOGIN_DOUBLE_CHECK: controller.AddTask(GameState.CANCELLING_LOGIN); break;
                 
-            case GameState.SHOWING_SELECTED_PHOTO:
-            case GameState.TAKING_WEBCAM_PIC:
-            case GameState.PIC_DISAPPROVAL: controller.AddTask(GameState.LISTING_IMAGES); break;
+            //case GameState.SHOWING_SELECTED_PHOTO:
+            //case GameState.TAKING_WEBCAM_PIC:
+            //case GameState.PIC_DISAPPROVAL: controller.AddTask(GameState.LISTING_IMAGES); break;
             default: Logger.LogWarning("Unhandled button press! Button = Cancel, game state = " + controller.GetGameState()); break;
         }
     }
@@ -151,7 +162,7 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed Add");
         switch (controller.GetGameState())
         {
-            case GameState.LISTING_IMAGES: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
+            //case GameState.LISTING_IMAGES: controller.AddTask(GameState.TAKING_WEBCAM_PIC); break;
             default: Logger.LogWarning("Unhandled button press! Button = Add, game state = " + controller.GetGameState()); break;
         }
     }
@@ -161,7 +172,7 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed LogOff");
         switch (controller.GetGameState())
         {
-            case GameState.LISTING_IMAGES: controller.AddTask(GameState.STARTED); break;
+            //case GameState.LISTING_IMAGES: controller.AddTask(GameState.STARTED); break;
             default: Logger.LogWarning("Unhandled button press! Button = LogOff, game state = " + controller.GetGameState()); break;
         }
     }
@@ -181,7 +192,7 @@ public class ButtonController : MonoBehaviour {
         Logger.Log("Pressed Cancel (on text input window)");
         switch (controller.GetGameState())
         {
-            case GameState.ENTER_NAME_PROMPT: controller.AddTask(GameState.STARTED); break;
+            //case GameState.ENTER_NAME_PROMPT: controller.AddTask(GameState.STARTED); break;
             default: Logger.LogWarning("Unhandled button press! Button = Cancel (on text input window), game state = " + controller.GetGameState()); break;
         }
     }

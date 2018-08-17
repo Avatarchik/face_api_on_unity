@@ -31,10 +31,14 @@ public class GameController : MonoBehaviour {
     private Dictionary<GameState, Func<Dictionary<string, object>, Task>> commands;
 
 
+    private int groupIdNum;
+    private string personGroupId;
     private Profile loggedInProfile;   // the current logged in profile (nullable)
 
     private Profile selectedProfile;       // store profile that user has selected (nullable)
     private ProfileImage? selectedProfileImg;   // store image that user has selected (nullable)
+
+    private string[] current_training_obj;
 
     void Awake()
     {
@@ -55,18 +59,19 @@ public class GameController : MonoBehaviour {
     void Start()
     {
         adjuster = UIAdjuster.instance;
-        apiHelper = new FaceAPIHelper(Constants.API_ACCESS_KEY, Constants.PERSON_GROUP_ID);
+        //apiHelper = new FaceAPIHelper(Constants.API_ACCESS_KEY, Constants.PERSON_GROUP_ID);
         InitCommandDict();
 
         //SetState(GameState.GAMECONTROLLER_STARTING);
 
-        //AddTask(GameState.STARTED);
-        AddTask(GameState.ROS_CONNECTION);
-
         if (!Directory.Exists(Constants.SAVE_PATH))
         {
-            Directory.CreateDirectory(Constants.SAVE_PATH);
+            //Directory.CreateDirectory(Constants.SAVE_PATH);
+            AddTask(GameState.INTERNAL_ERROR_MISSING_PROFILEDATA);
         }
+
+        //AddTask(GameState.STARTED);
+        AddTask(Constants.USE_ROS ? GameState.ROS_CONNECTION : GameState.STARTED);
 	}
 	
 	// Update is called once per frame
@@ -107,26 +112,18 @@ public class GameController : MonoBehaviour {
             {GameState.ROS_CONNECTION, this.OpenROSConnectScreen()},
 
             {GameState.ROS_HELLO_WORLD_ACK, this.ROSHelloWorldAck()},
+            {GameState.ROS_ASK_GROUP_ID, this.ROSAskingForID()},
+            {GameState.ROS_ASK_TO_RETRAIN, this.ROSAskingToRetrain()},
+            {GameState.ROS_RECEIVED_GROUP_ID, this.ROSGroupIDReceived()},
+            {GameState.ROS_TRAINING_RECEIVED_OBJECT_REQ, this.ROSTrainingObjReq()},
+            {GameState.ROS_TRAINING_RECEIVED_START_TAKING_PICS, this.ROSTrainingTakePics()},
+            {GameState.ROS_TRAINING_RECEIVED_FINISHED, this.ROSTrainingFinished()},
 
-            {GameState.STARTED, this.StartGame()},
-            {GameState.NEW_PROFILE_PROMPT, this.AskNewProfile()},
-            {GameState.MUST_LOGIN_PROMPT, this.ShowMustLogin()},
-            {GameState.ENTER_NAME_PROMPT, this.AskForNewProfileName()},
-            {GameState.EVALUATING_TYPED_NAME, this.EvaluateTypedNameAsync()},
-            {GameState.LISTING_IMAGES, this.ShowPicturesForProfile()},
-            {GameState.TAKING_WEBCAM_PIC, this.OpenWebcamForPictureAsync()},
-            {GameState.CHECKING_TAKEN_PIC, this.CheckPictureTakenAsync()},
-            {GameState.PIC_APPROVAL, this.ShowImgApprovalPage()},
-            {GameState.PIC_DISAPPROVAL, this.ShowImgDisapprovalPage()},
-            {GameState.SAVING_PIC, this.AddImgToProfileAsync()},
+            {GameState.STARTED, this.WhoAreYouScreen()},
             {GameState.LISTING_PROFILES, this.ListProfiles()},
             {GameState.LOGIN_DOUBLE_CHECK, this.ShowLoginDoubleCheck()},
             {GameState.LOGGING_IN, this.LogIn()},
             {GameState.CANCELLING_LOGIN, this.CancelLogin()},
-            {GameState.WELCOME_SCREEN, this.ShowWelcomeScreen()},
-            {GameState.SHOWING_SELECTED_PHOTO, this.ShowSelectedPhoto()},
-            {GameState.DELETING_PHOTO, this.DeletePhotoAsync()},
-            {GameState.REJECTION_PROMPT, this.ShowRejectionPrompt()},
 
             {GameState.API_ERROR_CREATE, this.APIError(GameState.API_ERROR_CREATE, "(during LargePersonGroup Person creation)")},
             {GameState.API_ERROR_COUNTING_FACES, this.APIError(GameState.API_ERROR_COUNTING_FACES, "(while counting faces)")},
@@ -137,7 +134,8 @@ public class GameController : MonoBehaviour {
             {GameState.API_ERROR_DELETING_FACE, this.APIError(GameState.API_ERROR_DELETING_FACE, "(while deleting a face)")},
 
             {GameState.INTERNAL_ERROR_PARSING, this.InternalError(GameState.INTERNAL_ERROR_PARSING, "(while parsing Task parameters)")},
-            {GameState.INTERNAL_ERROR_NAME_FROM_ID, this.InternalError(GameState.INTERNAL_ERROR_NAME_FROM_ID, "(while retrieving name for personId locally)")}
+            {GameState.INTERNAL_ERROR_NAME_FROM_ID, this.InternalError(GameState.INTERNAL_ERROR_NAME_FROM_ID, "(while retrieving name for personId locally)")},
+            {GameState.INTERNAL_ERROR_MISSING_PROFILEDATA, this.InternalError(GameState.INTERNAL_ERROR_NAME_FROM_ID, "(Missing ProfileData folder)")}
 
         };
     }
@@ -183,18 +181,898 @@ public class GameController : MonoBehaviour {
         };
     }
 
-    private Func<Dictionary<string, object>, Task> StartGame()
+    private Func<Dictionary<string, object>, Task> WhoAreYouScreen()
     {
-        
         return async (Dictionary<string, object> parameters) =>
         {
             SetState(GameState.STARTED);
             ClearQueuedData();
-            adjuster.AskQuestionAction("\r\nHi! Are you new here?");
+
+            if (Constants.USE_ROS && !File.Exists(Path.Combine(Constants.SAVE_PATH, Constants.GRP_INFO_FILE)))
+            {
+                AddTask(GameState.ROS_ASK_GROUP_ID);
+                return;
+            }
+
+            LoadGroupData();
+            apiHelper = new FaceAPIHelper(Constants.API_ACCESS_KEY, this.personGroupId);
+
+            List<Profile> profiles = LoadProfiles();
+            adjuster.ListProfilesAction("Who are you? Select one of the options", profiles, false);
         };
     }
 
-    private Func<Dictionary<string, object>, Task> AskNewProfile()
+    private Func<Dictionary<string, object>, Task> ListProfiles()
+    {
+        
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.LISTING_PROFILES);
+            List<Profile> profiles = LoadProfiles();
+            adjuster.ListProfilesAction("Here are the existing profiles:", profiles);
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ShowLoginDoubleCheck()
+    {
+        
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.LOGIN_DOUBLE_CHECK);
+
+            Profile attempt;
+            bool parsed = TryParseParam("attemptedLogin", parameters, out attempt);
+
+            if (parsed)
+            {
+                Sprite pic = ImgDirToSprite(attempt.profilePicture);
+
+                this.selectedProfile = attempt;
+
+                adjuster.PicWindowAction(pic, "Are you sure you want to log in as " + attempt.displayName + "?", "Login", "Back");
+            }
+
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> CancelLogin()
+    {
+
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.CANCELLING_LOGIN);
+            ClearQueuedData();
+            AddTask(GameState.LISTING_PROFILES);
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> LogIn()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.LOGGING_IN);
+
+            Profile profile;
+            bool parsed = TryParseParam("profile", parameters, out profile);
+
+            if (parsed)
+            {
+                // TODO: check identity before logging in
+                this.loggedInProfile = profile;
+                IncrementSessionNum(this.loggedInProfile);
+                if (profile.needsRetraining)
+                    AddTask(GameState.ROS_ASK_TO_RETRAIN);
+                else
+                    return; //TODO: figure out what to do in this case
+            }
+
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> APIError(GameState newState, string err)
+    {
+        
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(newState);
+            adjuster.PromptOKDialogueAction("API Error\r\n" + err);
+        };
+    }
+
+    // might combine with above function in the future
+    private Func<Dictionary<string, object>, Task> InternalError(GameState newState, string err, bool okBtn = true)
+    {
+        
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(newState);
+            if (okBtn)
+                adjuster.PromptOKDialogueAction("Internal Error\r\n" + err);
+            else
+                adjuster.PromptNoButtonPopUpAction("Internal Error\r\n" + err);
+        };
+    }
+
+    // TODO: find a better way to do this
+    private bool TryParseParam<T>(string param, Dictionary<string, object> dict, out T obj, bool throwError=true)
+    {
+        try
+        {
+            // todo: find a better way to do this.
+            if (typeof(T) == typeof(sbyte))
+            {
+                obj = (T)(object)SByte.Parse(dict[param].ToString());
+            }
+
+            if (typeof(T).IsValueType)
+            {
+                obj = (T)dict[param];
+            }
+            else
+            {
+                obj = (T)(object)dict[param];
+            }
+
+            return true;
+        }
+        catch (Exception e)
+        {
+            obj = default(T);
+            if (throwError)
+            {
+                Logger.LogError("[parameter parsing] Parsing " + param + " to " + typeof(T) + ": \r\n" + e.ToString());
+                AddTask(GameState.INTERNAL_ERROR_PARSING);
+            }
+            return false;
+        }
+    }
+
+    private void SetState(GameState newState)
+    {
+        currentState = newState;
+    }
+
+    public GameState GetGameState()
+    {
+        return currentState;
+    }
+
+    private void CreateProfile(string displayName, string personId, bool loginAfterward = true)
+    {
+        string folderName = displayName;
+        if (Directory.Exists(Path.Combine(Constants.SAVE_PATH, displayName)))
+        {
+            int count = Directory.GetDirectories(Constants.SAVE_PATH, displayName + "*").Length;
+            folderName = displayName + " (" + count + ")";
+        }
+        Directory.CreateDirectory(Path.Combine(Constants.SAVE_PATH, folderName));
+
+        Profile newPerson = new Profile
+        {
+            displayName = displayName,
+            folderName = folderName,
+            imageCount = 0,
+            images = new List<ProfileImage>(),
+            personId = personId,
+            profilePicture = "none",
+            sessionCount = 0,
+            needsRetraining = true
+        };
+
+        ExportProfileInfo(newPerson);
+
+        if (loginAfterward)
+        {
+            Dictionary<string, object> param = new Dictionary<string, object>
+            {
+                { "profile", newPerson }
+            };
+            AddTask(GameState.LOGGING_IN, param);
+        }
+
+    }
+    
+    private void ExportProfileInfo(Profile p)
+    {
+        Logger.Log("Exporting the following profile:\r\n" + p.ToString());
+        Dictionary<string, object> json = new Dictionary<string, object>();
+
+        json.Add("personId", p.personId);
+        json.Add("displayName", p.displayName);
+        json.Add("sessionCount", p.sessionCount);
+        json.Add("needsRetraining", p.needsRetraining);
+        json.Add("count", p.imageCount);
+        json.Add("profilePic", p.profilePicture ?? "none");
+
+        ProfileImage?[] imgList = new ProfileImage?[p.imageCount];
+
+        Logger.Log("p.images.Count: " + p.images.Count);
+
+        foreach (ProfileImage prof in p.images)
+        {
+            int index = prof.indexNumber;
+            imgList[index] = prof;
+        }
+
+        Dictionary<string, object> images = new Dictionary<string, object>();
+
+        for (int i = 0; i < imgList.Length; i++)
+        {
+            ProfileImage? data = imgList[i];
+
+            if (data == null)
+            {
+                images.Add(Constants.IMAGE_LABEL + " " + i, Constants.DELETED_IMG_LABEL);
+                continue;
+            }
+            else
+            {
+                Dictionary<string, object> imgData = new Dictionary<string, object>();
+                imgData.Add("path", data.Value.path);
+                imgData.Add("persistedFaceId", data.Value.persistedFaceId);
+
+                images.Add(Constants.IMAGE_LABEL + " " + i, imgData);
+            }
+        }
+
+        json.Add("images", images);
+
+        string savePath = Path.Combine(Constants.SAVE_PATH, p.folderName, Constants.INFO_FILE);
+        string unformatted = Json.Serialize(json);
+        string dataToSave = JToken.Parse(unformatted).ToString(Formatting.Indented);
+        System.IO.File.WriteAllText(savePath, dataToSave);
+    }
+
+    private async Task<bool> AddImgToProfile(Profile profile, Sprite img)
+    {
+        //adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (adding Face to LargePersonGroup Person)");
+        Texture2D tex = img.texture;
+        byte[] imgData = tex.EncodeToPNG();
+
+        FaceAPICall<string> call = apiHelper.AddFaceToLargePersonGroupPersonCall(profile.personId, imgData);
+
+        await MakeRequestAndSendInfoToROS(call);
+
+        string persistedId = call.GetResult();
+
+        //if (!call.SuccessfulCall() || persistedId == "")
+        //{
+        //    AddTask(GameState.API_ERROR_ADDING_FACE);
+        //    Logger.LogError("API Error while trying to add Face to LargePersonGroup Person");
+        //    return false;
+        //}
+
+        int count = profile.imageCount;
+
+        ProfileImage newImg = new ProfileImage
+        {
+            imageOwner = profile,
+            indexNumber = count,
+            number = profile.images.Count,
+            path = Path.Combine(Constants.SAVE_PATH, profile.folderName, Constants.IMAGE_LABEL + " " + count + ".png"),
+            persistedFaceId = persistedId
+        };
+
+        System.IO.File.WriteAllBytes(newImg.path, tex.EncodeToPNG());
+        Logger.Log("count = " + count);
+        profile.imageCount = count + 1;
+        Logger.Log("count now = " + profile.imageCount);
+
+        List<ProfileImage> newImgList = profile.images;
+        newImgList.Add(newImg);
+
+        profile.images = newImgList;
+
+        ExportProfileInfo(profile);
+        return await RetrainProfilesAsync();
+    }
+
+    private List<Profile> LoadProfiles()
+    {
+        try
+        {
+            List<Profile> profiles = new List<Profile>();
+
+            string[] profileDirs = Directory.GetDirectories(Constants.SAVE_PATH);
+            foreach (string dir in profileDirs)
+            {
+                if (File.Exists(Path.Combine(dir, Constants.INFO_FILE)))
+                {
+                    string folderName = new DirectoryInfo(dir).Name;
+
+                    Profile attemptToLoad = LoadProfileData(folderName);
+                    if (attemptToLoad != null)
+                        profiles.Add(attemptToLoad);
+                }
+            }
+
+            return profiles;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError("[profile list loading]: " + e.ToString());
+            return new List<Profile>();
+        }
+
+    }
+
+    private string GetProfilePicDir(string fName, int unknown = 0)
+    {
+        string dir;
+
+        string[] profileImgDirs = Directory.GetFiles(Path.Combine(Constants.SAVE_PATH, fName), "*.png");
+        if (profileImgDirs.Length < 1)
+        {
+            dir = "(" + unknown + ") " + Constants.UNKNOWN_IMG_RSRC_PATH;
+            unknown++;
+        }
+        else
+            dir = profileImgDirs[0];   //could also be a random photo, or maybe in the future they can pick a "profile pic"
+
+        return dir;
+    }
+
+    private void ClearQueuedData()
+    {
+        if (loggedInProfile != null)
+            ExportProfileInfo(loggedInProfile);
+        
+        loggedInProfile = null;
+        selectedProfile = null;
+        selectedProfileImg = null;
+    }
+
+    public void SelectProfile(Profile profile)
+    {
+        Dictionary<string, object> parameter = new Dictionary<string, object>
+        {
+            { "attemptedLogin", profile }
+        };
+
+        AddTask(GameState.LOGIN_DOUBLE_CHECK, parameter);
+    }
+
+    private void LoadGroupData()
+    {
+        try
+        {
+            Dictionary<string, object> grpData = LoadDataFile(Path.Combine(Constants.SAVE_PATH, Constants.GRP_INFO_FILE));
+            this.groupIdNum = Int32.Parse(grpData["id"].ToString());
+            this.personGroupId = grpData["personGroupId"].ToString();
+        }
+        catch (Exception e)
+        {
+            Logger.LogError("[data loading] " + e.ToString());
+        }
+    }
+
+    private Profile LoadProfileData(string folderName)
+    {
+        try
+        {
+            Profile newProf = new Profile();
+
+            Dictionary<string, object> data = LoadDataFile(Path.Combine(Constants.SAVE_PATH, folderName, Constants.INFO_FILE));
+            newProf.displayName = data["displayName"].ToString();
+            newProf.folderName = folderName;
+            newProf.imageCount = Int32.Parse(data["count"].ToString());
+            newProf.personId = data["personId"].ToString();
+            newProf.profilePicture = data["profilePic"].ToString();
+            newProf.sessionCount = Int32.Parse(data["sessionCount"].ToString());
+            newProf.needsRetraining = Boolean.Parse(data["needsRetraining"].ToString());
+
+            Dictionary<string, object> images = ((JObject)data["images"]).ToObject<Dictionary<string, object>>();
+
+            Logger.Log("images null: " + (images == null));
+
+            List<ProfileImage> profileImgs = LoadProfileImageData(newProf, images);
+
+            if (profileImgs == null)
+                throw new JsonException("profileImgs is null -- error processing image JSON data?");
+
+            newProf.images = profileImgs;
+            return newProf;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError("[data loading] " + e.ToString());
+            return null;
+        }
+    }
+
+    private List<ProfileImage> LoadProfileImageData(Profile p, Dictionary<string, object> data)
+    {
+        List<ProfileImage> profileImgs;
+        try
+        {
+            profileImgs = new List<ProfileImage>();
+            foreach (KeyValuePair<string, object> entry in data)
+            {
+                if (entry.Value.ToString() == "deleted")
+                    continue;
+                
+                Dictionary<string, object> info = ((JObject)entry.Value).ToObject<Dictionary<string, object>>();
+
+                string prefix = Constants.IMAGE_LABEL + " ";
+                int num = Int32.Parse(entry.Key.Substring(prefix.Length));
+
+                string path = (string)info["path"];
+                string persistedFaceId = (string)info["persistedFaceId"];
+
+                ProfileImage pImg = new ProfileImage
+                {
+                    imageOwner = p,
+                    indexNumber = num,
+                    number = profileImgs.Count,
+                    path = path,
+                    persistedFaceId = persistedFaceId
+                };
+
+                profileImgs.Add(pImg);
+
+            }
+        }
+        catch (Exception e)
+        {
+            profileImgs = null;
+            Logger.LogError("[data loading] " + e.ToString());
+        }
+
+        return profileImgs;
+    }
+
+    private string FolderNameToLoginName(string fName)
+    {
+        string pName = fName;
+        int index = fName.IndexOf('(');
+        if (index > 0)
+            pName = fName.Substring(0, index - 1);
+        return pName;
+    }
+
+    private Dictionary<string, object> LoadDataFile(string filePath)
+    {
+        string json = System.IO.File.ReadAllText(filePath);
+        return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+    }
+
+    private Dictionary<string, string> ReadJsonDictFromFile(string path)
+    {
+        string json = System.IO.File.ReadAllText(path);
+        Dictionary<string, string> data = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+        return data;
+    }
+
+    private async Task<bool> DeleteSelectedPhoto(Profile person, ProfileImage photo)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(photo.path);
+        string persistedId = photo.persistedFaceId;
+
+        adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (deleting Face from LargePersonGroup Person)");
+
+        FaceAPICall<bool> apiCall = apiHelper.DeleteFaceFromLargePersonGroupPersonCall(person.personId, persistedId);
+        await MakeRequestAndSendInfoToROS(apiCall);
+
+        bool deleted = apiCall.GetResult();
+
+        if (apiCall.SuccessfulCall() && deleted)
+        {
+            person.images.Remove(photo);
+            ExportProfileInfo(person);
+            File.Delete(photo.path);
+            return await RetrainProfilesAsync();
+        }
+        else
+        {
+            AddTask(GameState.API_ERROR_DELETING_FACE);
+            Logger.LogError("API Error while trying to delete Face from LargePersonGroup Person");
+            return false;
+        }
+    }
+
+    // currently, face API verification isn't needed unless a profile has at least 5 pics
+    // (the less pictures that the API is trained with, the less accurate its verifications will be)
+    private bool ShouldBeAuthenticated(Profile profile)
+    {
+        return profile.images.Count >= 5;
+    }
+
+    private bool AuthenticateLogin(string personId, Dictionary<string, decimal> guesses)
+    {
+        if (!guesses.ContainsKey(personId))
+        {
+            Logger.Log("guesses does not contain the personId");
+            return false;
+        }
+        else
+        {
+            decimal confidence = guesses[personId];
+            return confidence >= Constants.CONFIDENCE_THRESHOLD;
+        }
+    }
+
+    private async Task<bool> RetrainProfilesAsync()
+    {
+        // adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (re-training profiles)");
+        FaceAPICall<bool> startTrainingAPICall = apiHelper.StartTrainingLargePersonGroupCall();
+        await MakeRequestAndSendInfoToROS(startTrainingAPICall);
+
+        FaceAPICall<string> trainingStatusAPICall = apiHelper.GetLargePersonGroupTrainingStatusCall();
+        await MakeRequestAndSendInfoToROS(trainingStatusAPICall);
+
+        string status = trainingStatusAPICall.GetResult();
+        while (status != FaceAPIHelper.TRAINING_SUCCEEDED)
+        {
+            //if (status == FaceAPIHelper.TRAINING_FAILED || status == FaceAPIHelper.TRAINING_API_ERROR || !trainingStatusAPICall.SuccessfulCall()) {
+            //    AddTask(GameState.API_ERROR_TRAINING_STATUS);
+            //    Logger.LogError("API Error occurred when checking training status");
+            //    return false;
+            //}
+            Logger.Log("Checking training status...");
+            trainingStatusAPICall = apiHelper.GetLargePersonGroupTrainingStatusCall();
+            await MakeRequestAndSendInfoToROS(trainingStatusAPICall);
+            status = trainingStatusAPICall.GetResult();
+            Logger.Log("status = " + status);
+        }
+        return true;
+    }
+
+    private void IncrementSessionNum(Profile p)
+    {
+        p.sessionCount++;
+        ExportProfileInfo(p);
+    }
+
+    private bool IsInvalidName(string nameToTest) 
+    {
+        if (nameToTest.Length < 2 || nameToTest.Length > 50)  // limit is technically 256 characters anything over 31 seems unnecessarily long
+            return true;
+
+        char[] alphabet = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
+            'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 
+            'x', 'y', 'z', ' '};
+
+        bool onlySpaces = true;
+
+        foreach (char c in nameToTest.ToLower())
+        {
+            if (!alphabet.Contains(c))
+                return true;
+
+            if (c != ' ')
+                onlySpaces = false;
+        }
+
+        return onlySpaces || (nameToTest[nameToTest.Length - 1] == ' ');
+    }
+
+    private byte[] GetImageAsByteArray(string imageFilePath)
+    {
+        using (FileStream fileStream =
+            new FileStream(imageFilePath, FileMode.Open, FileAccess.Read))
+        {
+            BinaryReader binaryReader = new BinaryReader(fileStream);
+            return binaryReader.ReadBytes((int)fileStream.Length);
+        }
+    }
+
+    private Sprite ImgDirToSprite(string dir)
+    {
+        // Create a texture. Texture size does not matter, since
+        // LoadImage will replace with with incoming image size.
+        Texture2D tex;
+
+        if (dir.Contains("none"))
+        {
+            tex = Resources.Load(Constants.UNKNOWN_IMG_RSRC_PATH) as Texture2D;
+        }
+        else if (dir.Contains("Stock Images") || dir.Contains("Training Images"))
+        {
+            tex = Resources.Load(dir) as Texture2D;
+        }
+        else
+        {
+            tex = new Texture2D(2, 2);
+            byte[] pngBytes = GetImageAsByteArray(dir);
+            // Load data into the texture.
+            tex.LoadImage(pngBytes);
+        }
+
+        Sprite newImage = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0, 0));
+        return newImage;
+    }
+
+    public RosManager GetRosManager()
+    {
+        return this.rosManager;
+    }
+
+    public void SetRosManager(RosManager newRos)
+    {
+        this.rosManager = newRos;
+    }
+
+    public Profile GetSelectedProfile()
+    {
+        return this.selectedProfile;
+    }
+
+    public ProfileImage GetSelectedProfileImage()
+    {
+        return this.selectedProfileImg.Value;
+    }
+
+    private string GetNameFromIDLocal(string personId)
+    {
+        List<Profile> profiles = LoadProfiles();
+        foreach (Profile person in profiles)
+        {
+            if (person.personId.ToLower() == personId.ToLower())
+                return person.displayName;
+        }
+        return "";  //  ??? unknown id???
+    }
+
+    private void ReloadProfile()
+    {
+        this.loggedInProfile = LoadProfileData(loggedInProfile.folderName);
+    }
+
+
+    // ====================================================================
+    // All ROS message handlers.
+    // They should add tasks to the task queue, because many of their
+    // functionalities will throw errors if not run on the main thread.
+    // ====================================================================
+
+    public void RegisterRosMessageHandlers()
+    {
+        this.rosManager.RegisterHandler(FaceIDCommand.HELLO_WORLD_ACK, GameState.ROS_HELLO_WORLD_ACK);
+        this.rosManager.RegisterHandler(FaceIDCommand.SEND_GROUP_ID, GameState.ROS_RECEIVED_GROUP_ID);
+        this.rosManager.RegisterHandler(FaceIDCommand.TRAINING_SHOW_OBJECT, GameState.ROS_TRAINING_RECEIVED_OBJECT_REQ);
+        this.rosManager.RegisterHandler(FaceIDCommand.TRAINING_TAKE_PICS, GameState.ROS_TRAINING_RECEIVED_START_TAKING_PICS);
+        this.rosManager.RegisterHandler(FaceIDCommand.TRAINING_IS_FINISHED, GameState.ROS_TRAINING_RECEIVED_FINISHED);
+    }
+
+    // HELLO_WORLD_ACK
+    private void OnHelloWorldAckReceived(Dictionary<string, object> args)
+    {
+        Logger.Log("OnHelloWorldAckReceived");
+        AddTask(GameState.ROS_HELLO_WORLD_ACK);
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSHelloWorldAck()
+    {
+        
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_HELLO_WORLD_ACK);
+            ConnectionScreenController.instance.ShowContinueButton();
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSAskingForID()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_ASK_GROUP_ID);
+            adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (requesting group ID from controller)");
+            this.rosManager.SendGroupIDRequestAction().Invoke();
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSGroupIDReceived()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_RECEIVED_GROUP_ID);
+
+            string json;
+            bool parsed = TryParseParam("json", parameters, out json);
+
+            if (parsed)
+            {
+                System.IO.File.WriteAllText(Path.Combine(Constants.SAVE_PATH, Constants.GRP_INFO_FILE), json);
+                AddTask(GameState.STARTED);
+            }
+            else
+                AddTask(GameState.INTERNAL_ERROR_PARSING);
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSAskingToRetrain()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_ASK_TO_RETRAIN);
+
+            FaceIDTraining trainingMsg = new FaceIDTraining();
+            trainingMsg.event_type = FaceIDTraining.NEEDS_RETRAINING;
+            trainingMsg.p_name = loggedInProfile.displayName.Split(' ')[0];
+
+            rosManager.SendTrainingStateAction(trainingMsg);
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSTrainingObjReq()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_TRAINING_RECEIVED_OBJECT_REQ);
+
+            foreach (KeyValuePair<string, object> param in parameters)
+            {
+                Logger.LogWarning("Param: " + param.Key + " | " + param.Value.ToString());
+            }
+
+            sbyte objToShow;
+            bool parsed = SByte.TryParse(parameters["location"].ToString(), out objToShow);//TryParseParam("location", parameters, out objToShow);
+
+            if (parsed)
+            {
+                this.current_training_obj = Constants.TRAINING_OBJ_NAME_DICT[objToShow];
+                Sprite img = ImgDirToSprite(this.current_training_obj[0]);
+                Vector3 objPlacement = Constants.TRAINING_OBJ_LOC_DICT[objToShow];
+                adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
+                        
+                FaceIDTraining msg = new FaceIDTraining();
+                msg.event_type = FaceIDTraining.SHOWING_OBJECT;
+                msg.object_name = this.current_training_obj[1];
+                rosManager.SendTrainingStateAction(msg);
+
+                SetState(GameState.ROS_TRAINING_SEND_OBJECT_READY);
+            }
+            else
+                AddTask(GameState.INTERNAL_ERROR_PARSING);
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSTrainingTakePics()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_TRAINING_RECEIVED_START_TAKING_PICS);
+
+            int imageCount = 0; //count for this specific position/object
+
+            while (imageCount <= Constants.TRAINING_NUM_PER_POSITION)
+                imageCount += await TakePicAndCountFaceAsync();
+            
+
+            FaceIDTraining msg = new FaceIDTraining();
+            msg.event_type = FaceIDTraining.DONE_WITH_LOCATION;
+            rosManager.SendTrainingStateAction(msg);
+
+            SetState(GameState.ROS_TRAINING_SEND_LOCATION_DONE);
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSTrainingFinished()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_TRAINING_RECEIVED_FINISHED);
+
+            adjuster.PromptNoButtonPopUpAction("Done with training! :)");
+            //AddTask(GameState.LOGGING_IN);
+        };
+    }
+
+    private async Task<int> TakePicAndCountFaceAsync()
+    {
+        adjuster.EnableCamera();
+        await Task.Delay(Constants.TRAINING_CAM_DELAY_MS); //add delay so that the camera can turn on and focus
+        adjuster.GrabCurrentWebcamFrame();
+        Sprite frame = adjuster.GetCurrentSavedFrame();
+        byte[] picTaken = frame.texture.EncodeToPNG();
+
+        FaceAPICall<int> apiCall = apiHelper.CountFacesCall(picTaken);
+        await MakeRequestAndSendInfoToROS(apiCall);
+
+        int numFaces = apiCall.GetResult();
+
+        return (numFaces > 0 && await AddImgToProfile(this.loggedInProfile, frame)) ? 1 : 0;
+    }
+
+    // class so that it gets passed by reference
+    public class Profile : ProfileHandler.IScrollable
+    {
+        public string displayName, folderName;
+
+        // index: image number
+        // string 1: image path
+        // string 2: Face API persistedFaceId
+        public List<ProfileImage> images;
+
+        public string personId;
+
+        public int sessionCount;
+
+        public bool needsRetraining;
+
+        public int imageCount;
+
+        public string profilePicture;   // stored as a path
+
+        public string ImgPath { get { return profilePicture; } }
+
+        public string DisplayName { get { return displayName; } }
+
+        public string IdentifyingName { get { return folderName; } }
+
+        public override string ToString()
+        {
+            string ret = "";
+            ret += "Display Name: " + displayName;
+            ret += "\r\nFolder Name: " + folderName;
+            ret += "\r\npersonId: " + personId;
+            ret += "\r\nSession Count: " + sessionCount;
+            ret += "\r\nNeeds Retraining: " + needsRetraining;
+            ret += "\r\nImage Count: " + imageCount;
+            ret += "\r\nProfile Picture: " + profilePicture;
+
+            ret += "\r\nImages:\r\n";
+            foreach (ProfileImage img in images)
+            {
+                ret += "---\r\n";
+                ret += img.ToString();
+                ret += "\r\n---";
+            }
+
+            return ret;
+        }
+    }
+
+    //struct for simplicity
+    public struct ProfileImage : ProfileHandler.IScrollable
+    {
+        public Profile imageOwner;
+
+        public int indexNumber; //includes deleted images
+        public int number;      //excludes deleted images
+        public string path;
+        public string persistedFaceId;
+
+        public string ImgPath { get { return path; } }
+
+        public string DisplayName
+        {
+            get { return "you shouldn't be seeing this";/*Constants.IMAGE_DISPLAY_LABEL + " " + (number + 1);*/ }
+        }
+
+        public string IdentifyingName
+        {
+            get { return Path.Combine(imageOwner.folderName, Constants.IMAGE_LABEL + " " + indexNumber); }
+        }
+
+        public override string ToString()
+        {
+            string ret = "";
+            ret += "Image Owner: " + imageOwner.displayName;
+            ret += "\r\nIdentifyingName: " + IdentifyingName;
+            ret += "\r\nDisplayName: " + DisplayName;
+            ret += "\r\npersistedFaceId: " + persistedFaceId;
+            ret += "\r\npath: " + path;
+            ret += "\r\nindexNumber: " + indexNumber;
+            ret += "\r\nnumber: " + number;
+            return ret;
+        }
+    }
+
+    public async Task MakeRequestAndSendInfoToROS<T>(FaceAPICall<T> call)
+    {
+        FaceAPIRequest request = call.request;
+        //rosManager.SendFaceAPIRequestAction(request);
+
+        await call.MakeCallAsync();
+
+        FaceAPIResponse response = call.response;
+        //rosManager.SendFaceAPIResponseAction(response);
+    }
+
+
+    // old actions (commented):
+    /*private Func<Dictionary<string, object>, Task> AskNewProfile()
     {
         
         return async (Dictionary<string, object> parameters) =>
@@ -379,73 +1257,7 @@ public class GameController : MonoBehaviour {
 
         };
     }
-
-    private Func<Dictionary<string, object>, Task> ListProfiles()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.LISTING_PROFILES);
-            List<Profile> profiles = LoadProfiles();
-            adjuster.ListProfilesAction("Here are the existing profiles:", profiles);
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> ShowLoginDoubleCheck()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.LOGIN_DOUBLE_CHECK);
-
-            Profile attempt;
-            bool parsed = TryParseParam("attemptedLogin", parameters, out attempt);
-
-            if (parsed)
-            {
-                Sprite pic = ImgDirToSprite(attempt.profilePicture);
-
-                this.selectedProfile = attempt;
-
-                adjuster.PicWindowAction(pic, "Are you sure you want to log in as " + attempt.displayName + "?", "Login", "Back");
-            }
-
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> LogIn()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.LOGGING_IN);
-
-            Profile profile;
-            bool parsed = TryParseParam("profile", parameters, out profile);
-
-            if (parsed)
-            {
-                bool success = await AuthenticateIfNecessaryThenDo(() =>
-                {
-                    this.loggedInProfile = profile;
-                    AddTask(GameState.WELCOME_SCREEN);
-                }, profile, true);
-            }
-
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> CancelLogin()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.CANCELLING_LOGIN);
-            ClearQueuedData();
-            AddTask(GameState.LISTING_PROFILES);
-        };
-    }
-
+    
     private Func<Dictionary<string, object>, Task> ShowRejectionPrompt()
     {
         
@@ -551,370 +1363,6 @@ public class GameController : MonoBehaviour {
         };
     }
 
-    private Func<Dictionary<string, object>, Task> APIError(GameState newState, string err)
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(newState);
-            adjuster.PromptOKDialogueAction("API Error\r\n" + err);
-        };
-    }
-
-    // might combine with above function in the future
-    private Func<Dictionary<string, object>, Task> InternalError(GameState newState, string err)
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(newState);
-            adjuster.PromptOKDialogueAction("Internal Error\r\n" + err);
-        };
-    }
-
-    private async Task<bool> AuthenticateIfNecessaryThenDo(Action f, Profile profile, bool showRejectionPrompt, Sprite imgToCheck = null)
-    {
-        if (!ShouldBeAuthenticated(profile))
-        {
-            f();
-            return true;
-        }
-        else
-        {
-            bool verified = await VerifyAsync(profile, showRejectionPrompt, imgToCheck);
-            if (verified)
-            {
-                f();
-            }
-            return verified;
-        }
-    }
-
-    // TODO: find a better way to do this
-    private bool TryParseParam<T>(string param, Dictionary<string, object> dict, out T obj, bool throwError=true)
-    {
-        try
-        {
-            if (typeof(T).IsValueType)
-            {
-                obj = (T)dict[param];
-            }
-            else
-            {
-                obj = (T)(object)dict[param];
-            }
-
-            return true;
-        }
-        catch (Exception e)
-        {
-            obj = default(T);
-            if (throwError)
-            {
-                Logger.LogError("[parameter parsing] Parsing " + param + " to " + typeof(T) + ": \r\n" + e.ToString());
-                AddTask(GameState.INTERNAL_ERROR_PARSING);
-            }
-            return false;
-        }
-    }
-
-    private void SetState(GameState newState)
-    {
-        currentState = newState;
-    }
-
-    public GameState GetGameState()
-    {
-        return currentState;
-    }
-
-    private void CreateProfile(string displayName, string personId, bool loginAfterward = true)
-    {
-        string folderName = displayName;
-        if (Directory.Exists(Path.Combine(Constants.SAVE_PATH, displayName)))
-        {
-            int count = Directory.GetDirectories(Constants.SAVE_PATH, displayName + "*").Length;
-            folderName = displayName + " (" + count + ")";
-        }
-        Directory.CreateDirectory(Path.Combine(Constants.SAVE_PATH, folderName));
-
-        Profile newPerson = new Profile
-        {
-            displayName = displayName,
-            folderName = folderName,
-            imageCount = 0,
-            images = new List<ProfileImage>(),
-            personId = personId,
-            profilePicture = "none"
-        };
-
-        ExportProfileInfo(newPerson);
-
-        if (loginAfterward)
-        {
-            Dictionary<string, object> param = new Dictionary<string, object>
-            {
-                { "profile", newPerson }
-            };
-            AddTask(GameState.LOGGING_IN, param);
-        }
-
-    }
-    
-    private void ExportProfileInfo(Profile p)
-    {
-        Logger.Log("Exporting the following profile:\r\n" + p.ToString());
-        Dictionary<string, object> json = new Dictionary<string, object>();
-
-        json.Add("personId", p.personId);
-        json.Add("displayName", p.displayName);
-        json.Add("count", p.imageCount);
-        json.Add("profilePic", p.profilePicture ?? "none");
-
-        ProfileImage?[] imgList = new ProfileImage?[p.imageCount];
-
-        Logger.Log("p.images.Count: " + p.images.Count);
-
-        foreach (ProfileImage prof in p.images)
-        {
-            int index = prof.indexNumber;
-            imgList[index] = prof;
-        }
-
-        Dictionary<string, object> images = new Dictionary<string, object>();
-
-        for (int i = 0; i < imgList.Length; i++)
-        {
-            ProfileImage? data = imgList[i];
-
-            if (data == null)
-            {
-                images.Add(Constants.IMAGE_LABEL + " " + i, "deleted");
-                continue;
-            }
-            else
-            {
-                Dictionary<string, object> imgData = new Dictionary<string, object>();
-                imgData.Add("path", data.Value.path);
-                imgData.Add("persistedFaceId", data.Value.persistedFaceId);
-
-                images.Add(Constants.IMAGE_LABEL + " " + i, imgData);
-            }
-        }
-
-        json.Add("images", images);
-
-        string savePath = Path.Combine(Constants.SAVE_PATH, p.folderName, Constants.INFO_FILE);
-        string unformatted = Json.Serialize(json);
-        string dataToSave = JToken.Parse(unformatted).ToString(Formatting.Indented);
-        System.IO.File.WriteAllText(savePath, dataToSave);
-    }
-
-    private async Task<bool> AddImgToProfile(Profile profile, Sprite img)
-    {
-        adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (adding Face to LargePersonGroup Person)");
-        Texture2D tex = img.texture;
-        byte[] imgData = tex.EncodeToPNG();
-
-        FaceAPICall<string> call = apiHelper.AddFaceToLargePersonGroupPersonCall(profile.personId, imgData);
-
-        await MakeRequestAndSendInfoToROS(call);
-
-        string persistedId = call.GetResult();
-
-        if (!call.SuccessfulCall() || persistedId == "")
-        {
-            AddTask(GameState.API_ERROR_ADDING_FACE);
-            Logger.LogError("API Error while trying to add Face to LargePersonGroup Person");
-            return false;
-        }
-
-        int count = profile.imageCount;
-
-        ProfileImage newImg = new ProfileImage
-        {
-            imageOwner = profile,
-            indexNumber = count,
-            number = profile.images.Count,
-            path = Path.Combine(Constants.SAVE_PATH, profile.folderName, Constants.IMAGE_LABEL + " " + count + ".png"),
-            persistedFaceId = persistedId
-        };
-
-        System.IO.File.WriteAllBytes(newImg.path, tex.EncodeToPNG());
-        Logger.Log("count = " + count);
-        profile.imageCount = count + 1;
-        Logger.Log("count now = " + profile.imageCount);
-
-        List<ProfileImage> newImgList = profile.images;
-        newImgList.Add(newImg);
-
-        profile.images = newImgList;
-
-        ExportProfileInfo(profile);
-        return await RetrainProfilesAsync();
-    }
-
-    private List<Profile> LoadProfiles()
-    {
-        try
-        {
-            List<Profile> profiles = new List<Profile>();
-
-            string[] profileDirs = Directory.GetDirectories(Constants.SAVE_PATH);
-            foreach (string dir in profileDirs)
-            {
-                if (File.Exists(Path.Combine(dir, Constants.INFO_FILE)))
-                {
-                    string folderName = new DirectoryInfo(dir).Name;
-
-                    Profile attemptToLoad = LoadProfileData(folderName);
-                    if (attemptToLoad != null)
-                        profiles.Add(attemptToLoad);
-                }
-            }
-
-            return profiles;
-        }
-        catch (Exception e)
-        {
-            Logger.LogError("[profile list loading]: " + e.ToString());
-            return new List<Profile>();
-        }
-
-    }
-
-    private string GetProfilePicDir(string fName, int unknown = 0)
-    {
-        string dir;
-
-        string[] profileImgDirs = Directory.GetFiles(Path.Combine(Constants.SAVE_PATH, fName), "*.png");
-        if (profileImgDirs.Length < 1)
-        {
-            dir = "(" + unknown + ") " + Constants.UNKNOWN_IMG_RSRC_PATH;
-            unknown++;
-        }
-        else
-            dir = profileImgDirs[0];   //could also be a random photo, or maybe in the future they can pick a "profile pic"
-
-        return dir;
-    }
-
-    private void ClearQueuedData()
-    {
-        if (loggedInProfile != null)
-            ExportProfileInfo(loggedInProfile);
-        
-        loggedInProfile = null;
-        selectedProfile = null;
-        selectedProfileImg = null;
-    }
-
-    public void SelectProfile(Profile profile)
-    {
-        Dictionary<string, object> parameter = new Dictionary<string, object>
-        {
-            { "attemptedLogin", profile }
-        };
-
-        AddTask(GameState.LOGIN_DOUBLE_CHECK, parameter);
-    }
-
-    private Profile LoadProfileData(string folderName)
-    {
-        try
-        {
-            Profile newProf = new Profile();
-
-            Dictionary<string, object> data = LoadDataFile(folderName);
-            newProf.displayName = data["displayName"].ToString();
-            newProf.folderName = folderName;
-            newProf.imageCount = Int32.Parse(data["count"].ToString());
-            newProf.personId = data["personId"].ToString();
-            newProf.profilePicture = data["profilePic"].ToString();
-
-            Dictionary<string, object> images = ((JObject)data["images"]).ToObject<Dictionary<string, object>>();
-
-            Logger.Log("images null: " + (images == null));
-
-            List<ProfileImage> profileImgs = LoadProfileImageData(newProf, images);
-
-            if (profileImgs == null)
-                throw new JsonException("profileImgs is null -- error processing image JSON data?");
-
-            newProf.images = profileImgs;
-            return newProf;
-        }
-        catch (Exception e)
-        {
-            Logger.LogError("[data loading] " + e.ToString());
-            return null;
-        }
-    }
-
-    private List<ProfileImage> LoadProfileImageData(Profile p, Dictionary<string, object> data)
-    {
-        List<ProfileImage> profileImgs;
-        try
-        {
-            profileImgs = new List<ProfileImage>();
-            foreach (KeyValuePair<string, object> entry in data)
-            {
-                if (entry.Value.ToString() == "deleted")
-                    continue;
-                
-                Dictionary<string, object> info = ((JObject)entry.Value).ToObject<Dictionary<string, object>>();
-
-                string prefix = Constants.IMAGE_LABEL + " ";
-                int num = Int32.Parse(entry.Key.Substring(prefix.Length));
-
-                string path = (string)info["path"];
-                string persistedFaceId = (string)info["persistedFaceId"];
-
-                ProfileImage pImg = new ProfileImage
-                {
-                    imageOwner = p,
-                    indexNumber = num,
-                    number = profileImgs.Count,
-                    path = path,
-                    persistedFaceId = persistedFaceId
-                };
-
-                profileImgs.Add(pImg);
-
-            }
-        }
-        catch (Exception e)
-        {
-            profileImgs = null;
-            Logger.LogError("[data loading] " + e.ToString());
-        }
-
-        return profileImgs;
-    }
-
-    private string FolderNameToLoginName(string fName)
-    {
-        string pName = fName;
-        int index = fName.IndexOf('(');
-        if (index > 0)
-            pName = fName.Substring(0, index - 1);
-        return pName;
-    }
-
-    private Dictionary<string, object> LoadDataFile(string folder)
-    {
-        var filePath = Path.Combine(Constants.SAVE_PATH, folder, Constants.INFO_FILE);
-        string json = System.IO.File.ReadAllText(filePath);
-        return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-    }
-
-    private Dictionary<string, string> ReadJsonDictFromFile(string path)
-    {
-        string json = System.IO.File.ReadAllText(path);
-        Dictionary<string, string> data = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
-        return data;
-    }
-
     public void SelectPhoto(ProfileImage img)
     {
         Dictionary<string, object> parameters = new Dictionary<string, object>
@@ -925,41 +1373,7 @@ public class GameController : MonoBehaviour {
         AddTask(GameState.SHOWING_SELECTED_PHOTO, parameters);
     }
 
-    private async Task<bool> DeleteSelectedPhoto(Profile person, ProfileImage photo)
-    {
-        string fileName = Path.GetFileNameWithoutExtension(photo.path);
-        string persistedId = photo.persistedFaceId;
-
-        adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (deleting Face from LargePersonGroup Person)");
-
-        FaceAPICall<bool> apiCall = apiHelper.DeleteFaceFromLargePersonGroupPersonCall(person.personId, persistedId);
-        await MakeRequestAndSendInfoToROS(apiCall);
-
-        bool deleted = apiCall.GetResult();
-
-        if (apiCall.SuccessfulCall() && deleted)
-        {
-            person.images.Remove(photo);
-            ExportProfileInfo(person);
-            File.Delete(photo.path);
-            return await RetrainProfilesAsync();
-        }
-        else
-        {
-            AddTask(GameState.API_ERROR_DELETING_FACE);
-            Logger.LogError("API Error while trying to delete Face from LargePersonGroup Person");
-            return false;
-        }
-    }
-
-    // currently, face API verification isn't needed unless a profile has at least 5 pics
-    // (the less pictures that the API is trained with, the less accurate its verifications will be)
-    private bool ShouldBeAuthenticated(Profile profile)
-    {
-        return profile.images.Count >= 5;
-    }
-
-    private async Task<bool> VerifyAsync(Profile attempt, bool showRejectionPrompt = false, Sprite imgToCheck = null)
+private async Task<bool> VerifyAsync(Profile attempt, bool showRejectionPrompt = false, Sprite imgToCheck = null)
     {
         adjuster.HideAllElementsAction();
         Sprite frame;
@@ -1023,102 +1437,7 @@ public class GameController : MonoBehaviour {
             }
             return false;
         }
-    }
-
-    private bool AuthenticateLogin(string personId, Dictionary<string, decimal> guesses)
-    {
-        if (!guesses.ContainsKey(personId))
-        {
-            Logger.Log("guesses does not contain the personId");
-            return false;
-        }
-        else
-        {
-            decimal confidence = guesses[personId];
-            return confidence >= Constants.CONFIDENCE_THRESHOLD;
-        }
-    }
-
-    private async Task<bool> RetrainProfilesAsync()
-    {
-        adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (re-training profiles)");
-        FaceAPICall<bool> startTrainingAPICall = apiHelper.StartTrainingLargePersonGroupCall();
-        await MakeRequestAndSendInfoToROS(startTrainingAPICall);
-
-        FaceAPICall<string> trainingStatusAPICall = apiHelper.GetLargePersonGroupTrainingStatusCall();
-        await MakeRequestAndSendInfoToROS(trainingStatusAPICall);
-
-        string status = trainingStatusAPICall.GetResult();
-        while (status != FaceAPIHelper.TRAINING_SUCCEEDED)
-        {
-            if (status == FaceAPIHelper.TRAINING_FAILED || status == FaceAPIHelper.TRAINING_API_ERROR || !trainingStatusAPICall.SuccessfulCall()) {
-                AddTask(GameState.API_ERROR_TRAINING_STATUS);
-                Logger.LogError("API Error occurred when checking training status");
-                return false;
-            }
-            Logger.Log("Checking training status...");
-            trainingStatusAPICall = apiHelper.GetLargePersonGroupTrainingStatusCall();
-            await MakeRequestAndSendInfoToROS(trainingStatusAPICall);
-            status = trainingStatusAPICall.GetResult();
-            Logger.Log("status = " + status);
-        }
-        return true;
-    }
-
-    private bool IsInvalidName(string nameToTest) 
-    {
-        if (nameToTest.Length < 2 || nameToTest.Length > 50)  // limit is technically 256 characters anything over 31 seems unnecessarily long
-            return true;
-
-        char[] alphabet = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
-            'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 
-            'x', 'y', 'z', ' '};
-
-        bool onlySpaces = true;
-
-        foreach (char c in nameToTest.ToLower())
-        {
-            if (!alphabet.Contains(c))
-                return true;
-
-            if (c != ' ')
-                onlySpaces = false;
-        }
-
-        return onlySpaces || (nameToTest[nameToTest.Length - 1] == ' ');
-    }
-
-    private byte[] GetImageAsByteArray(string imageFilePath)
-    {
-        using (FileStream fileStream =
-            new FileStream(imageFilePath, FileMode.Open, FileAccess.Read))
-        {
-            BinaryReader binaryReader = new BinaryReader(fileStream);
-            return binaryReader.ReadBytes((int)fileStream.Length);
-        }
-    }
-
-    private Sprite ImgDirToSprite(string dir)
-    {
-        // Create a texture. Texture size does not matter, since
-        // LoadImage will replace with with incoming image size.
-        Texture2D tex;
-
-        if (dir.Contains("none"))
-        {
-            tex = Resources.Load(Constants.UNKNOWN_IMG_RSRC_PATH) as Texture2D;
-        }
-        else
-        {
-            tex = new Texture2D(2, 2);
-            byte[] pngBytes = GetImageAsByteArray(dir);
-            // Load data into the texture.
-            tex.LoadImage(pngBytes);
-        }
-
-        Sprite newImage = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0, 0));
-        return newImage;
-    }
+    }  
 
     private Sprite SadFaceSprite()
     {
@@ -1127,181 +1446,53 @@ public class GameController : MonoBehaviour {
         return newImage;
     }
 
-    public static string DetermineSavePath()
+    private async Task<bool> AuthenticateIfNecessaryThenDo(Action f, Profile profile, bool showRejectionPrompt, Sprite imgToCheck = null)
     {
-        string ret = Constants.EDITOR_SAVE_PATH;
-
-        #if UNITY_ANDROID
-        Debug.Log("Unity Android Detected");
-        ret = Constants.ANDROID_SAVE_PATH;
-        #endif
-
-        return ret;
-    }
-
-    public static string DetermineAPIAccessKey()
-    {
-        TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
-        return api_access_key.text;
-    }
-
-    public RosManager GetRosManager()
-    {
-        return this.rosManager;
-    }
-
-    public void SetRosManager(RosManager newRos)
-    {
-        this.rosManager = newRos;
-    }
-
-    public Profile GetSelectedProfile()
-    {
-        return this.selectedProfile;
-    }
-
-    public ProfileImage GetSelectedProfileImage()
-    {
-        return this.selectedProfileImg.Value;
-    }
-
-    private string GetNameFromIDLocal(string personId)
-    {
-        List<Profile> profiles = LoadProfiles();
-        foreach (Profile person in profiles)
+        if (!ShouldBeAuthenticated(profile))
         {
-            if (person.personId.ToLower() == personId.ToLower())
-                return person.displayName;
+            f();
+            return true;
         }
-        return "";  //  ??? unknown id???
+        else
+        {
+            bool verified = await VerifyAsync(profile, showRejectionPrompt, imgToCheck);
+            if (verified)
+            {
+                f();
+            }
+            return verified;
+        }
     }
 
-    private void ReloadProfile()
-    {
-        this.loggedInProfile = LoadProfileData(loggedInProfile.folderName);
-    }
-
-    // ====================================================================
-    // All ROS message handlers.
-    // They should add tasks to the task queue, because many of their
-    // functionalities will throw errors if not run on the main thread.
-    // ====================================================================
-
-    public void RegisterRosMessageHandlers()
-    {
-        this.rosManager.RegisterHandler(FaceIDCommand.HELLO_WORLD_ACK, GameState.ROS_HELLO_WORLD_ACK);
-    }
-
-    // HELLO_WORLD_ACK
-    private void OnHelloWorldAckReceived(Dictionary<string, object> args)
-    {
-        Logger.Log("OnHelloWorldAckReceived");
-        AddTask(GameState.ROS_HELLO_WORLD_ACK);
-    }
-
-    private Func<Dictionary<string, object>, Task> ROSHelloWorldAck()
+    private Func<Dictionary<string, object>, Task> LogIn()
     {
         
         return async (Dictionary<string, object> parameters) =>
         {
-            ConnectionScreenController.instance.ShowContinueButton();
-            //Logger.Log("Our \"Hello World\" ping has been received and acknowledged by the ROS Gods! :D");
-            //SetState(GameState.ROS_HELLO_WORLD_ACK);
-            //SceneManager.LoadScene("Game", LoadSceneMode.Single);
-            //await Task.Delay(2000);
-            //adjuster.HideAllElements();
-            //adjuster.PromptOKDialogue("Our \"Hello World\" ping has been received and acknowledged by the ROS Gods! :D");
-        };
-    }
+            SetState(GameState.LOGGING_IN);
 
-    // class so that it gets passed by reference
-    public class Profile : ProfileHandler.IScrollable
-    {
-        public string displayName, folderName;
+            Profile profile;
+            bool parsed = TryParseParam("profile", parameters, out profile);
 
-        // index: image number
-        // string 1: image path
-        // string 2: Face API persistedFaceId
-        public List<ProfileImage> images;
-
-        public string personId;
-
-        public int imageCount;
-
-        public string profilePicture;   // stored as a path
-
-        public string ImgPath { get { return profilePicture; } }
-
-        public string DisplayName { get { return displayName; } }
-
-        public string IdentifyingName { get { return folderName; } }
-
-        public override string ToString()
-        {
-            string ret = "";
-            ret += "Display Name: " + displayName;
-            ret += "\r\nFolder Name: " + folderName;
-            ret += "\r\npersonId: " + personId;
-            ret += "\r\nImage Count: " + imageCount;
-            ret += "\r\nProfile Picture: " + profilePicture;
-
-            ret += "\r\nImages:\r\n";
-            foreach (ProfileImage img in images)
+            if (parsed)
             {
-                ret += "---\r\n";
-                ret += img.ToString();
-                ret += "\r\n---";
+                bool success = await AuthenticateIfNecessaryThenDo(() =>
+                {
+                    //AddTask(GameState.WELCOME_SCREEN);
+                }, profile, true);
             }
 
-            return ret;
-        }
+        };
     }
-
-    //struct for simplicity
-    public struct ProfileImage : ProfileHandler.IScrollable
+    private Func<Dictionary<string, object>, Task> StartGame()
     {
-        public Profile imageOwner;
 
-        public int indexNumber; //includes deleted images
-        public int number;      //excludes deleted images
-        public string path;
-        public string persistedFaceId;
-
-        public string ImgPath { get { return path; } }
-
-        public string DisplayName
+        return async (Dictionary<string, object> parameters) =>
         {
-            get { return Constants.IMAGE_DISPLAY_LABEL + " " + (number + 1); }
-        }
-
-        public string IdentifyingName
-        {
-            get { return Path.Combine(imageOwner.folderName, Constants.IMAGE_LABEL + " " + indexNumber); }
-        }
-
-        public override string ToString()
-        {
-            string ret = "";
-            ret += "Image Owner: " + imageOwner.displayName;
-            ret += "\r\nIdentifyingName: " + IdentifyingName;
-            ret += "\r\nDisplayName: " + DisplayName;
-            ret += "\r\npersistedFaceId: " + persistedFaceId;
-            ret += "\r\npath: " + path;
-            ret += "\r\nindexNumber: " + indexNumber;
-            ret += "\r\nnumber: " + number;
-            return ret;
-        }
+            SetState(GameState.STARTED);
+            ClearQueuedData();
+            adjuster.AskQuestionAction("\r\nHi! Are you new here?");
+        };
     }
-
-    public async Task MakeRequestAndSendInfoToROS<T>(FaceAPICall<T> call)
-    {
-        FaceAPIRequest request = call.request;
-        rosManager.SendFaceAPIRequestAction(request);
-
-        await call.MakeCallAsync();
-
-        FaceAPIResponse response = call.response;
-        rosManager.SendFaceAPIResponseAction(response);
-    }
-                            
+    */
 }

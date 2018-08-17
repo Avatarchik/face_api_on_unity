@@ -72,7 +72,7 @@ public class ProfileHandler : MonoBehaviour {
         switch (type)
         {
             case ScrollableType.Profile: controller.SelectProfile((GameController.Profile) item); break;
-            case ScrollableType.ProfileImage: controller.SelectPhoto((GameController.ProfileImage) item); break;
+            //case ScrollableType.ProfileImage: controller.SelectPhoto((GameController.ProfileImage) item); break;
             default: Logger.LogError("Unknown ScrollableType type! Type = " + type.ToString()); break;
         }
     }

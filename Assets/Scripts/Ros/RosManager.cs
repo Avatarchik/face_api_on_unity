@@ -82,6 +82,8 @@ public class RosManager
             Constants.FACEID_EVENT_TOPIC, Constants.FACEID_EVENT_MESSAGE_TYPE);
         string statePubMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
             Constants.FACEID_STATE_TOPIC, Constants.FACEID_STATE_MESSAGE_TYPE);
+        string trainingStatePubMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
+            Constants.FACEID_TRAINING_STATE_TOPIC, Constants.FACEID_TRAINING_STATE_MESSAGE_TYPE);
         string apiRequestMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
             Constants.FACEAPIREQUEST_TOPIC, Constants.FACEAPIREQUEST_MESSAGE_TYPE);
         string apiResponseMessage = RosbridgeUtilities.GetROSJsonAdvertiseMsg(
@@ -93,6 +95,7 @@ public class RosManager
         this.connected = this.rosClient.SendMessage(eventPubMessage) &&
             this.rosClient.SendMessage(statePubMessage) &&
             this.rosClient.SendMessage(subMessage) &&
+            this.rosClient.SendMessage(trainingStatePubMessage) &&
             this.rosClient.SendMessage(apiRequestMessage) &&
             this.rosClient.SendMessage(apiResponseMessage);
     }
@@ -130,6 +133,20 @@ public class RosManager
             Logger.Log("Sent hello world action");
         };
     }
+
+    public Action SendGroupIDRequestAction()
+    {
+        return () => {
+            FaceIDEvent idEvent = new FaceIDEvent
+            {
+                event_type = FaceIDEvent.REQUEST_GROUP_ID,
+                message = ""
+            };
+            this.SendEventMessageToController(idEvent);
+            Logger.Log("Sent Group ID request action");
+        };
+    }
+
 
     // TODO: add various Actions here that represent the app's "public" state
 
@@ -244,4 +261,30 @@ public class RosManager
         });
         thread.Start();
     }
+
+    public void SendTrainingStateAction(FaceIDTraining msg)
+    {
+        Thread thread = new Thread(() => {
+            Dictionary<string, object> publish = new Dictionary<string, object>();
+            publish.Add("topic", Constants.FACEID_TRAINING_STATE_TOPIC);
+            publish.Add("op", "publish");
+
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("header", RosbridgeUtilities.GetROSHeader());
+            data.Add("event_type", msg.event_type);
+            data.Add("p_name", msg.p_name);
+            data.Add("object_name", msg.object_name);
+
+            publish.Add("msg", data);
+            Logger.Log("Sending FaceIDTraining ROS message: " + Json.Serialize(publish));
+            bool sent = false;
+            while (!sent)
+            {
+                sent = this.rosClient.SendMessage(Json.Serialize(publish));
+            }
+            Logger.Log("Successfully sent FaceIDTraining ROS message.");
+        });
+        thread.Start();
+    }
+
 }
