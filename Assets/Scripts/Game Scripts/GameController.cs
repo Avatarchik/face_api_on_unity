@@ -15,8 +15,9 @@ using Messages;
 using Messages.face_msgs;
 using Messages.face_id_app_msgs;
 
-public class GameController : MonoBehaviour {
-    
+public class GameController : MonoBehaviour
+{
+
     // The singleton instance.
     public static GameController instance = null;
 
@@ -70,17 +71,19 @@ public class GameController : MonoBehaviour {
             AddTask(GameState.INTERNAL_ERROR_MISSING_PROFILEDATA);
         }
 
+        AddTask(GameState.GAMECONTROLLER_STARTING);
+
         //AddTask(GameState.STARTED);
-        AddTask(Constants.USE_ROS ? GameState.ROS_CONNECTION : GameState.STARTED);
-	}
-	
-	// Update is called once per frame
+        //AddTask(Constants.USE_ROS ? GameState.ROS_CONNECTION : GameState.STARTED);
+    }
+
+    // Update is called once per frame
     // needs to be async because API calls are currently all marked with the async keyword
-	async void Update()
+    async void Update()
     {
         //Logger.Log("Current gameState: " + this.GetGameState());
         await HandleTaskQueue();
-	}
+    }
 
     // Handle main task queue.
     // needs to be async because API calls are currently all marked with the async keyword
@@ -109,6 +112,8 @@ public class GameController : MonoBehaviour {
     {
         commands = new Dictionary<GameState, Func<Dictionary<string, object>, Task>>()
         {
+            {GameState.GAMECONTROLLER_STARTING, this.Test()},
+            
             {GameState.ROS_CONNECTION, this.OpenROSConnectScreen()},
 
             {GameState.ROS_HELLO_WORLD_ACK, this.ROSHelloWorldAck()},
@@ -166,6 +171,20 @@ public class GameController : MonoBehaviour {
         }
     }
 
+    private Func<Dictionary<string, object>, Task> Test()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.GAMECONTROLLER_STARTING);
+
+            this.current_training_obj = Constants.TRAINING_OBJ_NAME_DICT[FaceIDTraining.TRAINING_LOC_BOT_LEFT];
+            Sprite img = ImgDirToSprite(this.current_training_obj[0]);
+            Vector3 objPlacement = Constants.TRAINING_OBJ_LOC_DICT[FaceIDTraining.TRAINING_LOC_BOT_LEFT];
+            adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
+        };
+    }
+
+
     // don't be intimidated by the method type!
     // each of these Funcs take in a Dictionary of parameters (nullable)
     // and returns a Task that (may or may not) use the parameters
@@ -204,7 +223,7 @@ public class GameController : MonoBehaviour {
 
     private Func<Dictionary<string, object>, Task> ListProfiles()
     {
-        
+
         return async (Dictionary<string, object> parameters) =>
         {
             SetState(GameState.LISTING_PROFILES);
@@ -215,22 +234,16 @@ public class GameController : MonoBehaviour {
 
     private Func<Dictionary<string, object>, Task> ShowLoginDoubleCheck()
     {
-        
+
         return async (Dictionary<string, object> parameters) =>
         {
             SetState(GameState.LOGIN_DOUBLE_CHECK);
 
-            Profile attempt;
-            bool parsed = TryParseParam("attemptedLogin", parameters, out attempt);
+            Profile attempt = (Profile) parameters["attemptedLogin"];
 
-            if (parsed)
-            {
-                Sprite pic = ImgDirToSprite(attempt.profilePicture);
-
-                this.selectedProfile = attempt;
-
-                adjuster.PicWindowAction(pic, "Are you sure you want to log in as " + attempt.displayName + "?", "Login", "Back");
-            }
+            Sprite pic = ImgDirToSprite(attempt.profilePicture);
+            this.selectedProfile = attempt;
+            adjuster.PicWindowAction(pic, "Are you sure you want to log in as " + attempt.displayName + "?", "Login", "Back");
 
         };
     }
@@ -252,26 +265,107 @@ public class GameController : MonoBehaviour {
         {
             SetState(GameState.LOGGING_IN);
 
-            Profile profile;
-            bool parsed = TryParseParam("profile", parameters, out profile);
+            Profile profile = (Profile) parameters["profile"];
 
-            if (parsed)
+            Tuple<bool, Dictionary<string, decimal>> verified = profile.needsRetraining ? null : await VerifiedLogin(profile);
+
+            if (profile.needsRetraining || verified.Item1)
             {
-                // TODO: check identity before logging in
                 this.loggedInProfile = profile;
                 IncrementSessionNum(this.loggedInProfile);
                 if (profile.needsRetraining)
                     AddTask(GameState.ROS_ASK_TO_RETRAIN);
                 else
-                    return; //TODO: figure out what to do in this case
+                    AddTask(GameState.ROS_SEND_ACCEPTED_LOGIN); //TODO: figure out what to do in this case
             }
+            else
+            {
+                Dictionary<string, object> paramz = new Dictionary<string, object>();
+                paramz.Add("attemptedLogin", profile.displayName);
 
+                bool knownPerp = false;
+                string perpName = "";
+
+                if (verified.Item2.Count != 0)
+                {
+                    string max_pID = (from x in verified.Item2 where x.Value == verified.Item2.Max(v => v.Value) select x.Key).ElementAt(0);
+                    if (max_pID != profile.personId && verified.Item2[max_pID] > Constants.CONFIDENCE_THRESHOLD)
+                    {
+                        knownPerp = true;
+
+                        while (perpName == "")
+                        {
+                            FaceAPICall<string> nameCall = apiHelper.GetNameFromLargePersonGroupPersonPersonIdCall(max_pID);
+                            await MakeRequestAndSendInfoToROS(nameCall);
+                            perpName = nameCall.GetResult();
+                        }
+                    }
+                }
+
+                paramz.Add("knownPerp", knownPerp);
+                paramz.Add("perpName", perpName.Split(' ')[0]);
+
+                AddTask(GameState.ROS_SEND_REJECTED_LOGIN, paramz);
+            }
+            
         };
+    }
+
+    // returns a tuple:
+    // Item2 is a dictionary of guesses/confidences for people in the first frame with detectable faces
+    // Item1 is a bool that returns true if p's personId is in this dictionary, and if the confidence value is above a certain threshold
+    private async Task<Tuple<bool, Dictionary<string, decimal>>> VerifiedLogin(Profile p, Sprite imgToCheck=null)
+    {
+        // 2 calls: Face - Detect and then Face - Identify
+
+        // first call: Face - Detect
+        List<string> detectedFaces = new List<string>();
+
+        if (imgToCheck == null) adjuster.EnableCamera();
+
+        while (detectedFaces == null || detectedFaces.Count < 1)    //could fail if the API call fails, or if the picture has no detectable faces
+        {
+            Sprite frameToCheck;
+
+            if (imgToCheck == null)
+            {
+                await Task.Delay(Constants.TRAINING_CAM_DELAY_MS); //add delay so that the camera can turn on and focus
+                adjuster.GrabCurrentWebcamFrame();
+                frameToCheck = adjuster.GetCurrentSavedFrame();
+            }
+            else
+                frameToCheck = imgToCheck;
+
+            byte[] frameData = frameToCheck.texture.EncodeToPNG();
+
+            FaceAPICall<List<string>> detectAPICall = apiHelper.DetectForIdentifyingCall(frameData);
+            await MakeRequestAndSendInfoToROS(detectAPICall);
+
+            detectedFaces = detectAPICall.GetResult();
+        }
+
+        if (imgToCheck == null) adjuster.DisableCamera();
+
+        // second call: Face - Identify
+        Dictionary<string, decimal> idGuesses = null;
+
+        while (idGuesses == null)
+        {
+            string biggestFaceId = detectedFaces[0];
+
+            FaceAPICall<Dictionary<string, decimal>> identifyAPICall = apiHelper.IdentifyFromFaceIdCall(biggestFaceId);
+            await MakeRequestAndSendInfoToROS(identifyAPICall);
+
+            idGuesses = identifyAPICall.GetResult();
+        }
+
+        return new Tuple<bool, Dictionary<string, decimal>>(idGuesses.ContainsKey(p.personId) && idGuesses[p.personId] > Constants.CONFIDENCE_THRESHOLD, 
+                                                            idGuesses);
     }
 
     private Func<Dictionary<string, object>, Task> APIError(GameState newState, string err)
     {
-        
+
         return async (Dictionary<string, object> parameters) =>
         {
             SetState(newState);
@@ -282,7 +376,7 @@ public class GameController : MonoBehaviour {
     // might combine with above function in the future
     private Func<Dictionary<string, object>, Task> InternalError(GameState newState, string err, bool okBtn = true)
     {
-        
+
         return async (Dictionary<string, object> parameters) =>
         {
             SetState(newState);
@@ -291,40 +385,6 @@ public class GameController : MonoBehaviour {
             else
                 adjuster.PromptNoButtonPopUpAction("Internal Error\r\n" + err);
         };
-    }
-
-    // TODO: find a better way to do this
-    private bool TryParseParam<T>(string param, Dictionary<string, object> dict, out T obj, bool throwError=true)
-    {
-        try
-        {
-            // todo: find a better way to do this.
-            if (typeof(T) == typeof(sbyte))
-            {
-                obj = (T)(object)SByte.Parse(dict[param].ToString());
-            }
-
-            if (typeof(T).IsValueType)
-            {
-                obj = (T)dict[param];
-            }
-            else
-            {
-                obj = (T)(object)dict[param];
-            }
-
-            return true;
-        }
-        catch (Exception e)
-        {
-            obj = default(T);
-            if (throwError)
-            {
-                Logger.LogError("[parameter parsing] Parsing " + param + " to " + typeof(T) + ": \r\n" + e.ToString());
-                AddTask(GameState.INTERNAL_ERROR_PARSING);
-            }
-            return false;
-        }
     }
 
     private void SetState(GameState newState)
@@ -371,7 +431,7 @@ public class GameController : MonoBehaviour {
         }
 
     }
-    
+
     private void ExportProfileInfo(Profile p)
     {
         Logger.Log("Exporting the following profile:\r\n" + p.ToString());
@@ -464,7 +524,8 @@ public class GameController : MonoBehaviour {
         profile.images = newImgList;
 
         ExportProfileInfo(profile);
-        return await RetrainProfilesAsync();
+        return true;
+        //return await RetrainProfilesAsync();
     }
 
     private List<Profile> LoadProfiles()
@@ -516,7 +577,7 @@ public class GameController : MonoBehaviour {
     {
         if (loggedInProfile != null)
             ExportProfileInfo(loggedInProfile);
-        
+
         loggedInProfile = null;
         selectedProfile = null;
         selectedProfileImg = null;
@@ -590,7 +651,7 @@ public class GameController : MonoBehaviour {
             {
                 if (entry.Value.ToString() == "deleted")
                     continue;
-                
+
                 Dictionary<string, object> info = ((JObject)entry.Value).ToObject<Dictionary<string, object>>();
 
                 string prefix = Constants.IMAGE_LABEL + " ";
@@ -723,13 +784,13 @@ public class GameController : MonoBehaviour {
         ExportProfileInfo(p);
     }
 
-    private bool IsInvalidName(string nameToTest) 
+    private bool IsInvalidName(string nameToTest)
     {
         if (nameToTest.Length < 2 || nameToTest.Length > 50)  // limit is technically 256 characters anything over 31 seems unnecessarily long
             return true;
 
-        char[] alphabet = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
-            'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 
+        char[] alphabet = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+            'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w',
             'x', 'y', 'z', ' '};
 
         bool onlySpaces = true;
@@ -829,6 +890,8 @@ public class GameController : MonoBehaviour {
     {
         this.rosManager.RegisterHandler(FaceIDCommand.HELLO_WORLD_ACK, GameState.ROS_HELLO_WORLD_ACK);
         this.rosManager.RegisterHandler(FaceIDCommand.SEND_GROUP_ID, GameState.ROS_RECEIVED_GROUP_ID);
+        this.rosManager.RegisterHandler(FaceIDCommand.LIST_PROFILES, GameState.STARTED);
+
         this.rosManager.RegisterHandler(FaceIDCommand.TRAINING_SHOW_OBJECT, GameState.ROS_TRAINING_RECEIVED_OBJECT_REQ);
         this.rosManager.RegisterHandler(FaceIDCommand.TRAINING_TAKE_PICS, GameState.ROS_TRAINING_RECEIVED_START_TAKING_PICS);
         this.rosManager.RegisterHandler(FaceIDCommand.TRAINING_IS_FINISHED, GameState.ROS_TRAINING_RECEIVED_FINISHED);
@@ -843,7 +906,7 @@ public class GameController : MonoBehaviour {
 
     private Func<Dictionary<string, object>, Task> ROSHelloWorldAck()
     {
-        
+
         return async (Dictionary<string, object> parameters) =>
         {
             SetState(GameState.ROS_HELLO_WORLD_ACK);
@@ -867,8 +930,8 @@ public class GameController : MonoBehaviour {
         {
             SetState(GameState.ROS_RECEIVED_GROUP_ID);
 
-            string json;
-            bool parsed = TryParseParam("json", parameters, out json);
+            bool parsed = parameters.ContainsKey("json");
+            string json = parameters["json"].ToString();
 
             if (parsed)
             {
@@ -900,11 +963,6 @@ public class GameController : MonoBehaviour {
         {
             SetState(GameState.ROS_TRAINING_RECEIVED_OBJECT_REQ);
 
-            foreach (KeyValuePair<string, object> param in parameters)
-            {
-                Logger.LogWarning("Param: " + param.Key + " | " + param.Value.ToString());
-            }
-
             sbyte objToShow;
             bool parsed = SByte.TryParse(parameters["location"].ToString(), out objToShow);//TryParseParam("location", parameters, out objToShow);
 
@@ -913,14 +971,14 @@ public class GameController : MonoBehaviour {
                 this.current_training_obj = Constants.TRAINING_OBJ_NAME_DICT[objToShow];
                 Sprite img = ImgDirToSprite(this.current_training_obj[0]);
                 Vector3 objPlacement = Constants.TRAINING_OBJ_LOC_DICT[objToShow];
-                adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
-                        
                 FaceIDTraining msg = new FaceIDTraining();
                 msg.event_type = FaceIDTraining.SHOWING_OBJECT;
                 msg.object_name = this.current_training_obj[1];
                 rosManager.SendTrainingStateAction(msg);
 
                 SetState(GameState.ROS_TRAINING_SEND_OBJECT_READY);
+
+                adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
             }
             else
                 AddTask(GameState.INTERNAL_ERROR_PARSING);
@@ -935,9 +993,15 @@ public class GameController : MonoBehaviour {
 
             int imageCount = 0; //count for this specific position/object
 
+            adjuster.EnableCamera();
+
             while (imageCount <= Constants.TRAINING_NUM_PER_POSITION)
+            {
                 imageCount += await TakePicAndCountFaceAsync();
-            
+                await Task.Delay(Constants.TRAINING_DELAY_BETWEEN_PICS_MS);
+            }
+
+            adjuster.DisableCamera();
 
             FaceIDTraining msg = new FaceIDTraining();
             msg.event_type = FaceIDTraining.DONE_WITH_LOCATION;
@@ -953,14 +1017,26 @@ public class GameController : MonoBehaviour {
         {
             SetState(GameState.ROS_TRAINING_RECEIVED_FINISHED);
 
-            adjuster.PromptNoButtonPopUpAction("Done with training! :)");
+            bool trained = await RetrainProfilesAsync();
+
+            while (!trained)
+                trained = await RetrainProfilesAsync(); // in case the free plan limit hits
+
+            this.loggedInProfile.needsRetraining = false;
+            ExportProfileInfo(this.loggedInProfile);
+
+            AddTask(GameState.LOGGING_IN);
+
+            //if (trained)
+            //    Logger.LogError("Unable to re-train ")
+            //else
+            //    adjuster.PromptNoButtonPopUpAction("Done with training, but API still needs to be re-trained.");
             //AddTask(GameState.LOGGING_IN);
         };
     }
 
     private async Task<int> TakePicAndCountFaceAsync()
     {
-        adjuster.EnableCamera();
         await Task.Delay(Constants.TRAINING_CAM_DELAY_MS); //add delay so that the camera can turn on and focus
         adjuster.GrabCurrentWebcamFrame();
         Sprite frame = adjuster.GetCurrentSavedFrame();
@@ -972,6 +1048,34 @@ public class GameController : MonoBehaviour {
         int numFaces = apiCall.GetResult();
 
         return (numFaces > 0 && await AddImgToProfile(this.loggedInProfile, frame)) ? 1 : 0;
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSSendAcceptLogin()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_SEND_ACCEPTED_LOGIN);
+
+            rosManager.SendAcceptLoginAction(this.loggedInProfile.displayName.Split(' ')[0], this.loggedInProfile.sessionCount).Invoke();
+
+            adjuster.PromptNoButtonPopUpAction("Done! Yay!");
+        };
+    }
+
+    private Func<Dictionary<string, object>, Task> ROSSendRejectLogin()
+    {
+        return async (Dictionary<string, object> parameters) =>
+        {
+            SetState(GameState.ROS_SEND_REJECTED_LOGIN);
+
+            string attemptedName = parameters["attemptedLogin"].ToString();
+            bool knownPerp = bool.Parse(parameters["knownPerp"].ToString());
+            string perpName = parameters["perpName"].ToString();
+
+            rosManager.SendRejectLoginAction(attemptedName, knownPerp, perpName).Invoke();
+
+            AddTask(GameState.STARTED);
+        };
     }
 
     // class so that it gets passed by reference
@@ -1069,7 +1173,6 @@ public class GameController : MonoBehaviour {
         FaceAPIResponse response = call.response;
         //rosManager.SendFaceAPIResponseAction(response);
     }
-
 
     // old actions (commented):
     /*private Func<Dictionary<string, object>, Task> AskNewProfile()

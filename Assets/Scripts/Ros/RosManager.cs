@@ -147,6 +147,47 @@ public class RosManager
         };
     }
 
+    public Action SendAcceptLoginAction(string loginName, int sessionNum)
+    {
+        return () => {
+
+            string serialized = Json.Serialize(new Dictionary<string, object>
+            {
+                { "loginName", loginName },
+                { "sessionNum", sessionNum }
+            });
+
+            FaceIDEvent idEvent = new FaceIDEvent
+            {
+                event_type = FaceIDEvent.WELCOME_LOGIN,
+                message = serialized
+            };
+            this.SendEventMessageToController(idEvent);
+            Logger.Log("Sent Accept Login request action");
+        };
+    }
+
+    public Action SendRejectLoginAction(string attemptedLogin, bool knownPerp, string perpName="")
+    {
+        return () => {
+
+            string serialized = Json.Serialize(new Dictionary<string, object>
+            {
+                { "attemptedLogin", attemptedLogin },
+                { "knownPerp", knownPerp },
+                { "perpName", perpName }
+            });
+
+            FaceIDEvent idEvent = new FaceIDEvent
+            {
+                event_type = FaceIDEvent.REJECT_LOGIN,
+                message = serialized
+            };
+            this.SendEventMessageToController(idEvent);
+            Logger.Log("Sent Reject Login request action");
+        };
+    }
+
 
     // TODO: add various Actions here that represent the app's "public" state
 
@@ -216,8 +257,8 @@ public class RosManager
             data.Add("app", Constants.FACE_MSGS_APP_NAME);
             data.Add("location", Constants.FACE_MSGS_LOCATION);
             data.Add("api_subscription_key", Util.ReadJsonParamFromStr(Constants.API_ACCESS_KEY, "subscriptionKey"));
-            data.Add("request_method", (byte)apiRequest.request_method);
-            data.Add("request_type", (byte)apiRequest.request_type);
+            data.Add("request_method", apiRequest.request_method);
+            data.Add("request_type", apiRequest.request_type);
 
             data.Add("content_type", apiRequest.content_type);
             data.Add("request_parameters", apiRequest.request_parameters);

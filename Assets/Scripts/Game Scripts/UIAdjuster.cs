@@ -570,6 +570,7 @@ public class UIAdjuster : MonoBehaviour {
             this.SetNoButtonPopUpObject(img, location);
 
             this.ShowNoButtonPopUp();
+            this.ShowTrainingObjectImage();
         });
     }
 }

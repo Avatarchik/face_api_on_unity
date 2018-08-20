@@ -29,8 +29,9 @@ public static class Constants
 
     // Training constants
 
-    public static readonly int TRAINING_NUM_PER_POSITION = 3;
-    public static readonly int TRAINING_CAM_DELAY_MS = 500;
+    public static readonly int TRAINING_NUM_PER_POSITION = 1;
+    public static readonly int TRAINING_CAM_DELAY_MS = 250;
+    public static readonly int TRAINING_DELAY_BETWEEN_PICS_MS = 75;
 
     // key: location (from FaceIDTraining msg); value: 2-val str array. val 0: path to image; val 1: object name
     public static readonly Dictionary<sbyte, string[]> TRAINING_OBJ_NAME_DICT = new Dictionary<sbyte, string[]>
@@ -61,7 +62,7 @@ public static class Constants
 
     // ROS connection information.
     public static readonly bool USE_ROS = true;
-    public static readonly string DEFAULT_ROSBRIDGE_IP = "192.168.1.167";
+    public static readonly string DEFAULT_ROSBRIDGE_IP = "192.168.1.236";
     public static readonly string DEFAULT_ROSBRIDGE_PORT = "9090";
     public static readonly int ROS_CONNECT_DELAY_MS = 1000;
 
