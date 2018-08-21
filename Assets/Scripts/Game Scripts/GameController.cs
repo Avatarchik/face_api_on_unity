@@ -298,7 +298,7 @@ public class GameController : MonoBehaviour
 
                 AddTask(GameState.ROS_SEND_REJECTED_LOGIN, paramz);
             }
-            
+
         };
     }
 
@@ -350,7 +350,7 @@ public class GameController : MonoBehaviour
             idGuesses = identifyAPICall.GetResult();
         }
 
-        return new Tuple<bool, Dictionary<string, decimal>>(idGuesses.ContainsKey(p.personId) && idGuesses[p.personId] > Constants.CONFIDENCE_THRESHOLD, 
+        return new Tuple<bool, Dictionary<string, decimal>>(idGuesses.ContainsKey(p.personId) && idGuesses[p.personId] > Constants.CONFIDENCE_THRESHOLD,
                                                             idGuesses);
     }
 
@@ -623,6 +623,12 @@ public class GameController : MonoBehaviour
                 throw new JsonException("profileImgs is null -- error processing image JSON data?");
 
             newProf.images = profileImgs;
+
+#if UNITY_ANDROID
+            if (!newProf.profilePicture.StartsWith("sdcard"))   // in case of relative pathing
+                newProf.profilePicture = Path.Combine("sdcard", newProf.profilePicture);
+#endif
+
             return newProf;
         }
         catch (Exception e)
@@ -656,7 +662,11 @@ public class GameController : MonoBehaviour
                     imageOwner = p,
                     indexNumber = num,
                     number = profileImgs.Count,
+#if UNITY_ANDROID
+                    path = !path.StartsWith("sdcard") ? Path.Combine("sdcard", path) : path,    // in case of relative pathing
+#else
                     path = path,
+#endif
                     persistedFaceId = persistedFaceId
                 };
 
