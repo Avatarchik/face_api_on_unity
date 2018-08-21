@@ -996,7 +996,7 @@ public class GameController : MonoBehaviour
 
             adjuster.EnableCamera();
 
-            while (imageCount <= Constants.TRAINING_NUM_PER_POSITION)
+            while (imageCount < Constants.TRAINING_NUM_PER_POSITION)
             {
                 imageCount += await TakePicAndCountFaceAsync();
                 await Task.Delay(Constants.TRAINING_DELAY_BETWEEN_PICS_MS);
@@ -1026,7 +1026,9 @@ public class GameController : MonoBehaviour
             this.loggedInProfile.needsRetraining = false;
             ExportProfileInfo(this.loggedInProfile);
 
-            AddTask(GameState.LOGGING_IN);
+            adjuster.HideAllElementsAction();
+
+            AddTask(GameState.LOGGING_IN, new Dictionary<string, object> { { "profile", this.loggedInProfile } });
 
             //if (trained)
             //    Logger.LogError("Unable to re-train ")
