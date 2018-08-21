@@ -13,29 +13,29 @@ public class UIAdjuster : MonoBehaviour {
     // unity is very anal about how its "single-threaded", so all UI stuff will now happen on a Queue...
     private Queue<Action> taskQueue = new Queue<Action>();
 
-    public Canvas questionPopUp;
+    public GameObject questionPopUp;
     public Text questionText;
 
-    public Canvas textInput;
+    public GameObject textInput;
     public Text textInputPrompt;
     public InputField inputField;
 
-    public Canvas okPopUp;
+    public GameObject okPopUp;
     public Text okDialogueText;
 
     public Canvas trainingObjImgContainer;
 
-    public Canvas noButtonPopUp;
+    public GameObject noButtonPopUp;
     public Text noButtonText;
 
-    public Canvas updateCancelPopUp;
+    public GameObject updateCancelPopUp;
     public Text updateCancelText;
 
-    public Canvas profileListWindow;
+    public GameObject profileListWindow;
     public Text profileListText;
     public GameObject profileList;
 
-    public Canvas imageListWindow;
+    public GameObject imageListWindow;
     public Text imageListText;
     public GameObject imageList;
 
@@ -210,7 +210,7 @@ public class UIAdjuster : MonoBehaviour {
     private void SetNoButtonPopUpColor(Color c)
     {
         // get reference of the UI element
-        GameObject panel = this.noButtonPopUp.gameObject.transform.GetChild(0).gameObject;
+        GameObject panel = noButtonPopUp;
 
         Image img = panel.GetComponent<Image>();
         img.color = c;
@@ -232,6 +232,8 @@ public class UIAdjuster : MonoBehaviour {
     {
         RectTransform rtImg = this.trainingObjImgContainer.transform.GetChild(0).GetComponent<RectTransform>();
         Image objImg = this.trainingObjImgContainer.transform.GetChild(0).GetComponent<Image>();
+        AspectRatioFitter arf = this.trainingObjImgContainer.transform.GetChild(0).GetComponent<AspectRatioFitter>();
+        arf.aspectRatio = newImg.rect.width / newImg.rect.height;
         objImg.sprite = newImg;
         rtImg.localScale = new Vector3(1, 1);
 
@@ -407,7 +409,7 @@ public class UIAdjuster : MonoBehaviour {
     private void SetProfileListBackButtonState(bool status)
     {
         // get references of the UI elements
-        GameObject panel = this.profileListWindow.gameObject.transform.GetChild(0).gameObject;
+        GameObject panel = profileListWindow;
         
         GameObject backBtn = panel.transform.GetChild(0).gameObject;
         GameObject listContainer = panel.transform.GetChild(2).gameObject;
@@ -560,7 +562,7 @@ public class UIAdjuster : MonoBehaviour {
 
             //change values
             this.SetNoButtonPopUpText(prompt);
-            this.SetNoButtonPopUpColor(Color.blue);
+            this.SetNoButtonPopUpColor(new Color(255, 255, 255, 100));
             this.SetNoButtonPopUpObject(null, new Vector3());
 
             //show the window after changes are made
