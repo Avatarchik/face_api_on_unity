@@ -2,6 +2,7 @@
 using System.IO;
 using UnityEngine;
 using Messages.face_id_app_msgs;
+using System;
 
 public static class Constants
 {
@@ -22,7 +23,7 @@ public static class Constants
     public static readonly string INFO_FILE = "info.txt";
     public static readonly string GRP_INFO_FILE = "group_info.txt";
 
-    public static readonly string API_ACCESS_KEY = DetermineAPIAccessKey();
+    public static readonly string API_ACCESS_KEY = GameController.DetermineAPIAccessKey();
     public static readonly decimal CONFIDENCE_THRESHOLD = 0.70m;    // decimal between 0 and 1
     public static readonly string IMAGE_LABEL = "Image";
     public static readonly string DELETED_IMG_LABEL = "deleted";
@@ -32,6 +33,7 @@ public static class Constants
     public static readonly int TRAINING_NUM_PER_POSITION = 1;
     public static readonly int TRAINING_CAM_DELAY_MS = 250;
     public static readonly int TRAINING_DELAY_BETWEEN_PICS_MS = 75;
+    public static readonly int TRAINING_IMG_ROT_DELAY_MS = 2000;
 
     // key: location (from FaceIDTraining msg); value: 2-val str array. val 0: path to image; val 1: object name
     public static readonly Dictionary<sbyte, string[]> TRAINING_OBJ_NAME_DICT = new Dictionary<sbyte, string[]>
@@ -46,18 +48,23 @@ public static class Constants
         {FaceIDTraining.TRAINING_LOC_BOT_MID, new string[] {Path.Combine("Training Images", "torchic"), "Torchic"}},
         {FaceIDTraining.TRAINING_LOC_BOT_RIGHT, new string[] {Path.Combine("Training Images", "mudkip"), "Mudkip"}}
     };
-    //key: location (from FaceIDTraining msg); value: position to place the object
-    public static readonly Dictionary<sbyte, Vector3> TRAINING_OBJ_LOC_DICT = new Dictionary<sbyte, Vector3>
+
+    public static readonly float W_MULT = 1/3.0f, H_MULT = 1 / 3.0f;
+
+    // key: location (from FaceIDTraining msg); value: Vector2 to calculate positioning
+    // Dict's value Vector is scaled (component-multiplied) with Vector2(panel_width, panel_height) to get scaled shift value
+    // ((TRAINING_OBJ_LOC_DICT[key] scale Vector2(panel_width, panel_height)) + center_of_parent_panel) = position of object
+    public static readonly Dictionary<sbyte, Vector2> TRAINING_OBJ_LOC_DICT = new Dictionary<sbyte, Vector2>
     {
-        {FaceIDTraining.TRAINING_LOC_TOP_LEFT,  new Vector3((2560.0f/3)/2 + 0*(2560.0f/3), (1600.0f/3)/2 + 0*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_TOP_MID,   new Vector3((2560.0f/3)/2 + 1*(2560.0f/3), (1600.0f/3)/2 + 0*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_TOP_RIGHT, new Vector3((2560.0f/3)/2 + 2*(2560.0f/3), (1600.0f/3)/2 + 0*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_MID_LEFT,  new Vector3((2560.0f/3)/2 + 0*(2560.0f/3), (1600.0f/3)/2 + 1*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_MID_MID,   new Vector3((2560.0f/3)/2 + 1*(2560.0f/3), (1600.0f/3)/2 + 1*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_MID_RIGHT, new Vector3((2560.0f/3)/2 + 2*(2560.0f/3), (1600.0f/3)/2 + 1*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_BOT_LEFT,  new Vector3((2560.0f/3)/2 + 0*(2560.0f/3), (1600.0f/3)/2 + 2*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_BOT_MID,   new Vector3((2560.0f/3)/2 + 1*(2560.0f/3), (1600.0f/3)/2 + 2*(1600.0f/3))},
-        {FaceIDTraining.TRAINING_LOC_BOT_RIGHT, new Vector3((2560.0f/3)/2 + 2*(2560.0f/3), (1600.0f/3)/2 + 2*(1600.0f/3))},
+        {FaceIDTraining.TRAINING_LOC_TOP_LEFT,  new Vector2(-W_MULT, +H_MULT)}, // (-,+)
+        {FaceIDTraining.TRAINING_LOC_TOP_MID,   new Vector2(+0.000f, +H_MULT)}, // (0,+)
+        {FaceIDTraining.TRAINING_LOC_TOP_RIGHT, new Vector2(+W_MULT, +H_MULT)}, // (+,+)
+        {FaceIDTraining.TRAINING_LOC_MID_LEFT,  new Vector2(-W_MULT, +0.000f)}, // (-,0)
+        {FaceIDTraining.TRAINING_LOC_MID_MID,   new Vector2(+0.000f, +0.000f)}, // (0,0)
+        {FaceIDTraining.TRAINING_LOC_MID_RIGHT, new Vector2(+W_MULT, +0.000f)}, // (+,0)
+        {FaceIDTraining.TRAINING_LOC_BOT_LEFT,  new Vector2(-W_MULT, -H_MULT)}, // (-,-)
+        {FaceIDTraining.TRAINING_LOC_BOT_MID,   new Vector2(+0.000f, -H_MULT)}, // (0,-)
+        {FaceIDTraining.TRAINING_LOC_BOT_RIGHT, new Vector2(+W_MULT, -H_MULT)}, // (+,-)
     };
 
     // ROS connection information.
@@ -108,11 +115,5 @@ public static class Constants
 #endif
 
         return ret;
-    }
-
-    private static string DetermineAPIAccessKey()
-    {
-        TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
-        return api_access_key.text;
     }
 }

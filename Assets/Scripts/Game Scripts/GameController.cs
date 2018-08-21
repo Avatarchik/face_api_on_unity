@@ -41,6 +41,8 @@ public class GameController : MonoBehaviour
 
     private string[] current_training_obj;
 
+    public string api_acc_key;
+
     void Awake()
     {
         // Enforce singleton pattern.
@@ -59,6 +61,7 @@ public class GameController : MonoBehaviour
     // Use this for initialization
     void Start()
     {
+        api_acc_key = GameController.DetermineAPIAccessKey();
         adjuster = UIAdjuster.instance;
         //apiHelper = new FaceAPIHelper(Constants.API_ACCESS_KEY, Constants.PERSON_GROUP_ID);
         InitCommandDict();
@@ -123,6 +126,8 @@ public class GameController : MonoBehaviour
             {GameState.ROS_TRAINING_RECEIVED_OBJECT_REQ, this.ROSTrainingObjReq()},
             {GameState.ROS_TRAINING_RECEIVED_START_TAKING_PICS, this.ROSTrainingTakePics()},
             {GameState.ROS_TRAINING_RECEIVED_FINISHED, this.ROSTrainingFinished()},
+            {GameState.ROS_SEND_ACCEPTED_LOGIN, this.ROSSendAcceptLogin()},
+            {GameState.ROS_SEND_REJECTED_LOGIN, this.ROSSendRejectLogin()},
 
             {GameState.STARTED, this.WhoAreYouScreen()},
             {GameState.LISTING_PROFILES, this.ListProfiles()},
@@ -177,9 +182,11 @@ public class GameController : MonoBehaviour
         {
             SetState(GameState.GAMECONTROLLER_STARTING);
 
-            this.current_training_obj = Constants.TRAINING_OBJ_NAME_DICT[FaceIDTraining.TRAINING_LOC_BOT_LEFT];
+            sbyte loc = FaceIDTraining.TRAINING_LOC_BOT_RIGHT;
+
+            this.current_training_obj = Constants.TRAINING_OBJ_NAME_DICT[loc];
             Sprite img = ImgDirToSprite(this.current_training_obj[0]);
-            Vector3 objPlacement = Constants.TRAINING_OBJ_LOC_DICT[FaceIDTraining.TRAINING_LOC_BOT_LEFT];
+            Vector2 objPlacement = Constants.TRAINING_OBJ_LOC_DICT[loc];
             adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
         };
     }
@@ -1174,428 +1181,10 @@ public class GameController : MonoBehaviour
         //rosManager.SendFaceAPIResponseAction(response);
     }
 
-    // old actions (commented):
-    /*private Func<Dictionary<string, object>, Task> AskNewProfile()
+    public static string DetermineAPIAccessKey()
     {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.NEW_PROFILE_PROMPT);
-            adjuster.AskQuestionAction("\r\nWould you like to make a profile?");
-        };
+        while (GameController.instance == null) continue;
+        TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
+        return api_access_key.text;
     }
-
-    private Func<Dictionary<string, object>, Task> ShowMustLogin()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.MUST_LOGIN_PROMPT);
-            adjuster.PromptOKDialogueAction("\r\nIn order to use the app, you must be logged into a profile.");
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> AskForNewProfileName()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.ENTER_NAME_PROMPT);
-            adjuster.PromptInputTextAction("What is your name?\r\n\r\nPlease ensure that the name you enter is valid.");
-        };
-
-    }
-
-    private Func<Dictionary<string, object>, Task> EvaluateTypedNameAsync()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.EVALUATING_TYPED_NAME);
-
-            string typedName;
-
-            bool parsed = TryParseParam("typedName", parameters, out typedName);
-
-            if (parsed)
-            {
-                if (IsInvalidName(typedName))  // conditions for an invalid name
-                    AddTask(GameState.ENTER_NAME_PROMPT);
-                else
-                {
-                    adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (creating LargePersonGroup Person)");
-                    FaceAPICall<string> apiCall = apiHelper.CreateLargePersonGroupPersonCall(typedName);
-                    await MakeRequestAndSendInfoToROS(apiCall);
-                    string personID = apiCall.GetResult();
-                    if (apiCall.SuccessfulCall() && personID != "") //successful API call
-                    {
-                        CreateProfile(typedName, personID, true);
-                    }
-                    else
-                    { // maybe internet is down, maybe api access is revoked...
-                        AddTask(GameState.API_ERROR_CREATE);
-                        Logger.LogError("API Error occurred while trying to create a LargePersonGroup Person");
-                    }
-                }
-            }
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> ShowPicturesForProfile()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.LISTING_IMAGES);
-            List<ProfileImage> imageList = loggedInProfile.images;
-            adjuster.ListImagesAction("Here is your photo listing:", imageList);
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> OpenWebcamForPictureAsync()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.TAKING_WEBCAM_PIC);
-            await AuthenticateIfNecessaryThenDo(() =>
-            {
-                adjuster.ShowWebcamAction("Take a picture!", "Snap!");
-            }, loggedInProfile, true);
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> CheckPictureTakenAsync()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.CHECKING_TAKEN_PIC);
-
-            Sprite frame;
-            bool parsed = TryParseParam("photo", parameters, out frame);
-
-            if (parsed)
-            {
-                adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (counting faces in image)");
-                byte[] imgData = frame.texture.EncodeToPNG();
-
-                FaceAPICall<int> apiCall = apiHelper.CountFacesCall(imgData);
-                await MakeRequestAndSendInfoToROS(apiCall);
-
-                int numFaces = apiCall.GetResult();
-                if (!apiCall.SuccessfulCall() || numFaces == -1)
-                {
-                    AddTask(GameState.API_ERROR_COUNTING_FACES);
-                    Logger.LogError("API Error occurred while trying to count the faces in a frame");
-                    return;
-                }
-
-                if (numFaces < 1)   //pic has no detectable faces in it... try again.
-                    AddTask(GameState.PIC_DISAPPROVAL);
-                else
-                {
-                    await AuthenticateIfNecessaryThenDo(() =>
-                    {
-                        Dictionary<string, object> param = new Dictionary<string, object>
-                        {
-                            { "savedFrame", frame }
-                        };
-
-                        AddTask(GameState.PIC_APPROVAL, param);
-
-                    }, loggedInProfile, true, frame);
-                }
-            }
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> ShowImgDisapprovalPage()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.PIC_DISAPPROVAL);
-            adjuster.PicWindowAction(SadFaceSprite(), "I didn't like this picture :( Can we try again?", "Try again...", "Cancel");
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> ShowImgApprovalPage()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.PIC_APPROVAL);
-
-            Sprite frame;
-            bool parsed = TryParseParam("savedFrame", parameters, out frame);
-
-            if (parsed)
-            {
-                adjuster.PicWindowAction(frame, "I like it! What do you think?", "Keep it!", "Try again...");
-            }
-
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> AddImgToProfileAsync()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.SAVING_PIC);
-
-            Sprite frame;
-            bool parsed = TryParseParam("photo", parameters, out frame);
-
-            if (parsed)
-            {
-                bool success = await AddImgToProfile(loggedInProfile, frame);
-                if (success)
-                {
-                    ReloadProfile();
-                    AddTask(GameState.LISTING_IMAGES);
-                }
-            }
-
-        };
-    }
-    
-    private Func<Dictionary<string, object>, Task> ShowRejectionPrompt()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.REJECTION_PROMPT);
-
-            string attemptedName;
-            Dictionary<string, decimal> guesses;
-            bool parsedName = TryParseParam("name", parameters, out attemptedName);
-            bool parsedGuesses = TryParseParam("guesses", parameters, out guesses);
-
-            if (parsedName && parsedGuesses)
-            {
-                string response = "Are you sure you're " + attemptedName + "? Because I'm";
-
-                if (guesses.Count == 0)
-                    response += " not sure who you are, to be honest.";
-                else
-                {
-                    adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (retrieving name(s) from personId(s))");
-                    for (int i = 0; i < guesses.Count; i++)
-                    {
-                        string key = guesses.Keys.ElementAt(i);
-                        string nameFromID = GetNameFromIDLocal(key);
-                        if (nameFromID == "")
-                        {
-                            AddTask(GameState.INTERNAL_ERROR_NAME_FROM_ID);
-                            Logger.LogError("Internal Error occurred while trying to get name from ID (after auth fail)");
-                        }
-
-                        if ((i + 1) == guesses.Count && guesses.Count > 1)
-                            response += " and";
-
-                        response += " " + (guesses[key] * 100) + "% sure you are " + nameFromID;
-
-                        if ((i + 1) < guesses.Count)
-                            response += ",";
-                    }
-                }
-                adjuster.PromptOKDialogueAction(response);
-            }
-
-        };
-    }
-
-    // safe to assume that user has logged in (?)
-    private Func<Dictionary<string, object>, Task> ShowWelcomeScreen()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.WELCOME_SCREEN);
-            adjuster.PromptOKDialogueAction("\r\nWelcome, " + loggedInProfile.displayName + "!");
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> ShowSelectedPhoto()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.SHOWING_SELECTED_PHOTO);
-
-            ProfileImage img;
-            bool parsed = TryParseParam("profileImg", parameters, out img);
-
-            if (parsed)
-            {
-                Sprite photo = ImgDirToSprite(img.path);
-
-                this.selectedProfileImg = img;
-
-                adjuster.PicWindowAction(photo, "Nice picture! What would you like to do with it?", "Delete it", "Keep it");
-            }
-
-        };
-    }
-
-    private Func<Dictionary<string, object>, Task> DeletePhotoAsync()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.DELETING_PHOTO);
-
-            ProfileImage img;
-            bool parsed = TryParseParam("profileImg", parameters, out img);
-
-            if (parsed)
-            {
-                await AuthenticateIfNecessaryThenDo(async () =>
-                {
-                    bool success = await DeleteSelectedPhoto(loggedInProfile, img);
-                    if (success)
-                    {
-                        ReloadProfile();
-                        AddTask(GameState.LISTING_IMAGES);
-                    }
-                }, loggedInProfile, true);
-            }
-
-        };
-    }
-
-    public void SelectPhoto(ProfileImage img)
-    {
-        Dictionary<string, object> parameters = new Dictionary<string, object>
-        {
-            { "profileImg", img }
-        };
-
-        AddTask(GameState.SHOWING_SELECTED_PHOTO, parameters);
-    }
-
-private async Task<bool> VerifyAsync(Profile attempt, bool showRejectionPrompt = false, Sprite imgToCheck = null)
-    {
-        adjuster.HideAllElementsAction();
-        Sprite frame;
-
-        if (imgToCheck == null)
-        {
-            adjuster.EnableCamera();
-            await Task.Delay(Constants.CAM_DELAY_MS); //add delay so that the camera can turn on and focus
-            adjuster.GrabCurrentWebcamFrame();
-            frame = adjuster.GetCurrentSavedFrame();
-        }
-        else
-            frame = imgToCheck;
-
-        adjuster.PromptNoButtonPopUpAction("Hold on, I'm thinking... (identifying faces in current frame)");
-        byte[] frameData = frame.texture.EncodeToPNG();
-
-        // 2 calls: Face - Detect and then Face - Identify
-
-        FaceAPICall<List<string>> detectAPICall = apiHelper.DetectForIdentifyingCall(frameData);
-        await MakeRequestAndSendInfoToROS(detectAPICall);
-        List<string> faceIds = detectAPICall.GetResult();
-
-        if (!detectAPICall.SuccessfulCall() || faceIds == null)
-        {
-            AddTask(GameState.API_ERROR_IDENTIFYING);
-            Logger.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
-            return false;
-        }
-
-        string biggestFaceId = faceIds[0];
-
-        FaceAPICall<Dictionary<string, decimal>> identifyAPICall = apiHelper.IdentifyFromFaceIdCall(biggestFaceId);
-        await MakeRequestAndSendInfoToROS(identifyAPICall);
-
-        Dictionary<string, decimal> guesses = identifyAPICall.GetResult();
-
-        if (!identifyAPICall.SuccessfulCall() || guesses == null)
-        {
-            AddTask(GameState.API_ERROR_IDENTIFYING);
-            Logger.LogError("API Error occurred while trying to identify LargePersonGroup Person in a frame");
-            return false;
-        }
-
-        bool verified = AuthenticateLogin(attempt.personId, guesses);
-        if (verified)  //identified and above confidence threshold
-        {
-            return true;
-        }
-        else
-        {
-            if (showRejectionPrompt)
-            {
-                Dictionary<string, object> parameters = new Dictionary<string, object>
-                {
-                    { "name", attempt.displayName },
-                    { "guesses", guesses }
-                };
-
-                AddTask(GameState.REJECTION_PROMPT, parameters);
-            }
-            return false;
-        }
-    }  
-
-    private Sprite SadFaceSprite()
-    {
-        Texture2D tex = Resources.Load(Constants.SADFACE_IMG_RSRC_PATH) as Texture2D;
-        Sprite newImage = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0, 0));
-        return newImage;
-    }
-
-    private async Task<bool> AuthenticateIfNecessaryThenDo(Action f, Profile profile, bool showRejectionPrompt, Sprite imgToCheck = null)
-    {
-        if (!ShouldBeAuthenticated(profile))
-        {
-            f();
-            return true;
-        }
-        else
-        {
-            bool verified = await VerifyAsync(profile, showRejectionPrompt, imgToCheck);
-            if (verified)
-            {
-                f();
-            }
-            return verified;
-        }
-    }
-
-    private Func<Dictionary<string, object>, Task> LogIn()
-    {
-        
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.LOGGING_IN);
-
-            Profile profile;
-            bool parsed = TryParseParam("profile", parameters, out profile);
-
-            if (parsed)
-            {
-                bool success = await AuthenticateIfNecessaryThenDo(() =>
-                {
-                    //AddTask(GameState.WELCOME_SCREEN);
-                }, profile, true);
-            }
-
-        };
-    }
-    private Func<Dictionary<string, object>, Task> StartGame()
-    {
-
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.STARTED);
-            ClearQueuedData();
-            adjuster.AskQuestionAction("\r\nHi! Are you new here?");
-        };
-    }
-    */
 }

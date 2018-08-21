@@ -23,7 +23,7 @@ public class UIAdjuster : MonoBehaviour {
     public Canvas okPopUp;
     public Text okDialogueText;
 
-    public Image noButtonImage;
+    public Canvas trainingObjImgContainer;
 
     public Canvas noButtonPopUp;
     public Text noButtonText;
@@ -89,7 +89,7 @@ public class UIAdjuster : MonoBehaviour {
         imageListGrp = imageListWindow.GetComponent<CanvasGroup>();
         cameraFeedGrp = cameraFeed.GetComponent<CanvasGroup>();
         updateImgGrp = updateBoxImg.GetComponent<CanvasGroup>();
-        objectImgGrp = noButtonImage.GetComponent<CanvasGroup>();
+        objectImgGrp = trainingObjImgContainer.GetComponent<CanvasGroup>();
 
         webcamController = webcamDisplay.GetComponent<WebcamController>();
 	}
@@ -219,21 +219,31 @@ public class UIAdjuster : MonoBehaviour {
     private void HideTrainingObjectImage()
     {
         objectImgGrp.alpha = 0;
-        noButtonImage.gameObject.SetActive(false);
+        trainingObjImgContainer.gameObject.SetActive(false);
     }
 
     private void ShowTrainingObjectImage()
     {
         objectImgGrp.alpha = 1;
-        noButtonImage.gameObject.SetActive(true);
+        trainingObjImgContainer.gameObject.SetActive(true);
     }
 
-    private void ChangeTrainingObjectImage(Sprite newImg, Vector3 location)
+    private void ChangeTrainingObjectImage(Sprite newImg, Vector2 location)
     {
-        noButtonImage.sprite = newImg;
+        RectTransform rtImg = this.trainingObjImgContainer.transform.GetChild(0).GetComponent<RectTransform>();
+        Image objImg = this.trainingObjImgContainer.transform.GetChild(0).GetComponent<Image>();
+        objImg.sprite = newImg;
+        rtImg.localScale = new Vector3(1, 1);
 
-        RectTransform rt = noButtonImage.gameObject.GetComponent<RectTransform>();
-        rt.position = location;
+        RectTransform rt = trainingObjImgContainer.gameObject.GetComponent<RectTransform>();
+        Rect panelRect = trainingObjImgContainer.transform.parent.GetComponent<RectTransform>().rect;
+
+        // trainingObjImgContainer's size will be 95% of its parent "quadrant" (currently there are 9 quadrants)
+        // objImg will be stretched to fit into its parent (trainingObjImgContainer) using an AspectRatioFitter
+        float ratio = 0.95f;
+        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, ratio * Constants.W_MULT * panelRect.width);
+        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, ratio * Constants.H_MULT * panelRect.height);
+        rt.localPosition = Vector2.Scale(location, new Vector2(panelRect.width, panelRect.height));
     }
 
     private void SetNoButtonPopUpObject(Sprite img, Vector3 location)
@@ -551,7 +561,7 @@ public class UIAdjuster : MonoBehaviour {
             //change values
             this.SetNoButtonPopUpText(prompt);
             this.SetNoButtonPopUpColor(Color.blue);
-            this.SetNoButtonPopUpObject(null, new Vector2());
+            this.SetNoButtonPopUpObject(null, new Vector3());
 
             //show the window after changes are made
             this.ShowNoButtonPopUp();
