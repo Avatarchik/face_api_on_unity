@@ -23,7 +23,7 @@ public static class Constants
     public static readonly string INFO_FILE = "info.txt";
     public static readonly string GRP_INFO_FILE = "group_info.txt";
 
-    public static readonly string API_ACCESS_KEY = GameController.DetermineAPIAccessKey();
+    public static readonly string API_ACCESS_KEY_PATH = "api_access_key";
     public static readonly decimal CONFIDENCE_THRESHOLD = 0.70m;    // decimal between 0 and 1
     public static readonly string IMAGE_LABEL = "Image";
     public static readonly string DELETED_IMG_LABEL = "deleted";
@@ -33,7 +33,7 @@ public static class Constants
     public static readonly int TRAINING_NUM_PER_POSITION = 1;
     public static readonly int TRAINING_CAM_DELAY_MS = 250;
     public static readonly int TRAINING_DELAY_BETWEEN_PICS_MS = 75;
-    public static readonly int TRAINING_IMG_ROT_DELAY_MS = 2000;
+    public static readonly int TRAINING_IMG_ROT_DELAY_MS = 250;
 
     // key: location (from FaceIDTraining msg); value: 2-val str array. val 0: path to image; val 1: object name
     public static readonly Dictionary<sbyte, string[]> TRAINING_OBJ_NAME_DICT = new Dictionary<sbyte, string[]>

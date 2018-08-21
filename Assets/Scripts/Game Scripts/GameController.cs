@@ -74,10 +74,10 @@ public class GameController : MonoBehaviour
             AddTask(GameState.INTERNAL_ERROR_MISSING_PROFILEDATA);
         }
 
-        AddTask(GameState.GAMECONTROLLER_STARTING);
+        //AddTask(GameState.GAMECONTROLLER_STARTING);
 
         //AddTask(GameState.STARTED);
-        //AddTask(Constants.USE_ROS ? GameState.ROS_CONNECTION : GameState.STARTED);
+        AddTask(Constants.USE_ROS ? GameState.ROS_CONNECTION : GameState.STARTED);
     }
 
     // Update is called once per frame
@@ -115,7 +115,7 @@ public class GameController : MonoBehaviour
     {
         commands = new Dictionary<GameState, Func<Dictionary<string, object>, Task>>()
         {
-            {GameState.GAMECONTROLLER_STARTING, this.Test()},
+            //{GameState.GAMECONTROLLER_STARTING, this.Test()},
             
             {GameState.ROS_CONNECTION, this.OpenROSConnectScreen()},
 
@@ -176,22 +176,6 @@ public class GameController : MonoBehaviour
         }
     }
 
-    private Func<Dictionary<string, object>, Task> Test()
-    {
-        return async (Dictionary<string, object> parameters) =>
-        {
-            SetState(GameState.GAMECONTROLLER_STARTING);
-
-            sbyte loc = FaceIDTraining.TRAINING_LOC_BOT_RIGHT;
-
-            this.current_training_obj = Constants.TRAINING_OBJ_NAME_DICT[loc];
-            Sprite img = ImgDirToSprite(this.current_training_obj[0]);
-            Vector2 objPlacement = Constants.TRAINING_OBJ_LOC_DICT[loc];
-            adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
-        };
-    }
-
-
     // don't be intimidated by the method type!
     // each of these Funcs take in a Dictionary of parameters (nullable)
     // and returns a Task that (may or may not) use the parameters
@@ -221,7 +205,7 @@ public class GameController : MonoBehaviour
             }
 
             LoadGroupData();
-            apiHelper = new FaceAPIHelper(Constants.API_ACCESS_KEY, this.personGroupId);
+            apiHelper = new FaceAPIHelper(this.api_acc_key, this.personGroupId);
 
             List<Profile> profiles = LoadProfiles();
             adjuster.ListProfilesAction("Who are you? Select one of the options", profiles, false);
@@ -1183,8 +1167,7 @@ public class GameController : MonoBehaviour
 
     public static string DetermineAPIAccessKey()
     {
-        while (GameController.instance == null) continue;
-        TextAsset api_access_key = Resources.Load("api_access_key") as TextAsset;
+        TextAsset api_access_key = Resources.Load(Constants.API_ACCESS_KEY_PATH) as TextAsset;
         return api_access_key.text;
     }
 }

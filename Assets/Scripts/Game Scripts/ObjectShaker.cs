@@ -8,7 +8,10 @@ public class ObjectShaker : MonoBehaviour {
     // The singleton instance.
     public static ObjectShaker instance = null;
 
-    private float delay = 1.0f * Constants.TRAINING_IMG_ROT_DELAY_MS;
+    private float delay = Constants.TRAINING_IMG_ROT_DELAY_MS / 1000.0f;
+    private bool CCW = false;
+
+    private readonly float degOfRotation = 15.0f;
 
     void Awake()
     {
@@ -28,7 +31,6 @@ public class ObjectShaker : MonoBehaviour {
     // Use this for initialization
     void Start()
     {
-        transform.Rotate(new Vector3(0, 0, 30.0f));
 	}
 	
 	// Update is called once per frame
@@ -39,9 +41,12 @@ public class ObjectShaker : MonoBehaviour {
             delay -= Time.deltaTime;
             return;
         }
-        
-        Vector3 rot = -transform.rotation.eulerAngles;
-        transform.Rotate(rot == Vector3.zero ? new Vector3(0, 0, 30.0f) : rot);
-        delay = 1.0f * Constants.TRAINING_IMG_ROT_DELAY_MS;
+        if (transform.rotation.eulerAngles == Vector3.zero) transform.Rotate(new Vector3(0, 0, -degOfRotation));
+
+        Vector3 rot = new Vector3(0, 0, 2*degOfRotation);
+        rot *= CCW ? -1 : 1;
+        transform.Rotate(rot);
+        CCW = !CCW;
+        delay = Constants.TRAINING_IMG_ROT_DELAY_MS / 1000.0f;
 	}
 }

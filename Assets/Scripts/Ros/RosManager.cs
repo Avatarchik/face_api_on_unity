@@ -256,7 +256,7 @@ public class RosManager
             data.Add("header", RosbridgeUtilities.GetROSHeader());
             data.Add("app", Constants.FACE_MSGS_APP_NAME);
             data.Add("location", Constants.FACE_MSGS_LOCATION);
-            data.Add("api_subscription_key", Util.ReadJsonParamFromStr(Constants.API_ACCESS_KEY, "subscriptionKey"));
+            data.Add("api_subscription_key", Util.ReadJsonParamFromStr(gameController.api_acc_key, "subscriptionKey"));
             data.Add("request_method", apiRequest.request_method);
             data.Add("request_type", apiRequest.request_type);
 
