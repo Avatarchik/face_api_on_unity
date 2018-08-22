@@ -256,7 +256,7 @@ public class GameController : MonoBehaviour
         {
             SetState(GameState.LOGGING_IN);
 
-            adjuster.HideAllElementsAction();
+            adjuster.HideAllElementsAction(false);
 
             Profile profile = (Profile) parameters["profile"];
 
