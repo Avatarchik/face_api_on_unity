@@ -256,6 +256,8 @@ public class GameController : MonoBehaviour
         {
             SetState(GameState.LOGGING_IN);
 
+            adjuster.HideAllElementsAction();
+
             Profile profile = (Profile) parameters["profile"];
 
             Tuple<bool, Dictionary<string, decimal>> verified = profile.needsRetraining ? null : await VerifiedLogin(profile);
