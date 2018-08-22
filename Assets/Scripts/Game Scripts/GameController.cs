@@ -314,7 +314,9 @@ public class GameController : MonoBehaviour
         // first call: Face - Detect
         List<string> detectedFaces = new List<string>();
 
-        if (imgToCheck == null) adjuster.EnableCamera();
+        adjuster.EnableCamera();
+
+        //if (imgToCheck == null) adjuster.EnableCamera();
 
         while (detectedFaces == null || detectedFaces.Count < 1)    //could fail if the API call fails, or if the picture has no detectable faces
         {
@@ -337,7 +339,8 @@ public class GameController : MonoBehaviour
             detectedFaces = detectAPICall.GetResult();
         }
 
-        if (imgToCheck == null) adjuster.DisableCamera();
+        adjuster.DisableCamera();
+        //if (imgToCheck == null) adjuster.DisableCamera();
 
         // second call: Face - Identify
         Dictionary<string, decimal> idGuesses = null;
@@ -352,7 +355,7 @@ public class GameController : MonoBehaviour
             idGuesses = identifyAPICall.GetResult();
         }
 
-        return new Tuple<bool, Dictionary<string, decimal>>(idGuesses.ContainsKey(p.personId) && idGuesses[p.personId] > Constants.CONFIDENCE_THRESHOLD,
+        return new Tuple<bool, Dictionary<string, decimal>>(idGuesses.ContainsKey(p.personId) && idGuesses[p.personId] >= Constants.CONFIDENCE_THRESHOLD,
                                                             idGuesses);
     }
 
