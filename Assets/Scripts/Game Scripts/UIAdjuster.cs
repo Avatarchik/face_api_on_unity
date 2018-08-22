@@ -346,10 +346,11 @@ public class UIAdjuster : MonoBehaviour {
     }
     
     // Will need to turn off feed before hiding it
-    private void HideCameraFeed()
+    private void HideCameraFeed(bool disableCamera=true)
     {
         cameraFeedGrp.alpha = 0;
-        webcamController.DisableCamera();
+        if (disableCamera)
+            webcamController.DisableCamera();
     }
 
     // Will need to turn on feed before showing it
@@ -426,12 +427,12 @@ public class UIAdjuster : MonoBehaviour {
         rtSb.anchorMin = new Vector2(rtSb.anchorMin.x, status ? 0.35f : 0.15f);
     }
 
-    private void HideAllElements()
+    private void HideAllElements(bool disableCamera=true)
     {
         this.HideOKPopUp();
         this.HideImageList();
         this.HideTextInput();
-        this.HideCameraFeed();
+        this.HideCameraFeed(disableCamera);
         this.HideProfileList();
         this.HideUpdateImage();
         this.HideNoButtonPopUp();
@@ -439,18 +440,18 @@ public class UIAdjuster : MonoBehaviour {
         this.HideUpdateCancelPopUp();
     }
 
-    public void HideAllElementsAction()
+    public void HideAllElementsAction(bool disableCam=true)
     {
         this.taskQueue.Enqueue(() => {
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
         });
     }
 
-    public void AskQuestionAction(string q)
+    public void AskQuestionAction(string q, bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetQuestionPopUpText(q);
@@ -460,11 +461,11 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void PromptInputTextAction(string prompt)
+    public void PromptInputTextAction(string prompt, bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetTextInputPrompt(prompt);
@@ -474,11 +475,11 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void PromptOKDialogueAction(string prompt)
+    public void PromptOKDialogueAction(string prompt, bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetOKPopUpText(prompt);
@@ -504,7 +505,7 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void ListImagesAction(string prompt, List<GameController.ProfileImage> profiles)
+    public void ListImagesAction(string prompt, List<GameController.ProfileImage> profiles, bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
@@ -519,11 +520,11 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void ShowWebcamAction(string prompt, string updateText = "Update", string cancelText = "Cancel")
+    public void ShowWebcamAction(string prompt, string updateText = "Update", string cancelText = "Cancel", bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetUpdateCancelPopUpText(prompt);
@@ -536,11 +537,11 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void PicWindowAction(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel")
+    public void PicWindowAction(Sprite pic, string prompt, string updateText = "Update", string cancelText = "Cancel", bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetUpdateCancelPopUpText(prompt);
@@ -554,11 +555,11 @@ public class UIAdjuster : MonoBehaviour {
         });
     }
 
-    public void PromptNoButtonPopUpAction(string prompt)
+    public void PromptNoButtonPopUpAction(string prompt, bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetNoButtonPopUpText(prompt);
@@ -570,11 +571,11 @@ public class UIAdjuster : MonoBehaviour {
         });
     }    
 
-    public void ShowObjectOnScreenAction(Sprite img, Vector2 location, Color color)
+    public void ShowObjectOnScreenAction(Sprite img, Vector2 location, Color color, bool disableCam = true)
     {
         this.taskQueue.Enqueue(() => {
             //hide everything not in use
-            this.HideAllElements();
+            this.HideAllElements(disableCam);
 
             //change values
             this.SetNoButtonPopUpText("");

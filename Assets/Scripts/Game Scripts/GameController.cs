@@ -983,7 +983,7 @@ public class GameController : MonoBehaviour
 
                 SetState(GameState.ROS_TRAINING_SEND_OBJECT_READY);
 
-                adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f));
+                adjuster.ShowObjectOnScreenAction(img, objPlacement, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1.0f), false);
             }
             else
                 AddTask(GameState.INTERNAL_ERROR_PARSING);
