@@ -31,7 +31,7 @@ public static class Constants
     // Training constants
 
     public static readonly int TRAINING_NUM_PER_POSITION = 1;
-    public static readonly int TRAINING_CAM_DELAY_MS = 250;
+    public static readonly int TRAINING_CAM_DELAY_MS = 75;
     public static readonly int TRAINING_DELAY_BETWEEN_PICS_MS = 75;
     public static readonly int TRAINING_IMG_ROT_DELAY_MS = 250;
 

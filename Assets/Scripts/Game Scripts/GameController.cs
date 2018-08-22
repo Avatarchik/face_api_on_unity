@@ -952,6 +952,8 @@ public class GameController : MonoBehaviour
         {
             SetState(GameState.ROS_ASK_TO_RETRAIN);
 
+            adjuster.EnableCamera();
+
             FaceIDTraining trainingMsg = new FaceIDTraining();
             trainingMsg.event_type = FaceIDTraining.NEEDS_RETRAINING;
             trainingMsg.p_name = loggedInProfile.displayName.Split(' ')[0];
@@ -996,7 +998,7 @@ public class GameController : MonoBehaviour
 
             int imageCount = 0; //count for this specific position/object
 
-            adjuster.EnableCamera();
+            //adjuster.EnableCamera();
 
             while (imageCount < Constants.TRAINING_NUM_PER_POSITION)
             {
@@ -1004,7 +1006,7 @@ public class GameController : MonoBehaviour
                 await Task.Delay(Constants.TRAINING_DELAY_BETWEEN_PICS_MS);
             }
 
-            adjuster.DisableCamera();
+            //adjuster.DisableCamera();
 
             FaceIDTraining msg = new FaceIDTraining();
             msg.event_type = FaceIDTraining.DONE_WITH_LOCATION;
@@ -1026,6 +1028,7 @@ public class GameController : MonoBehaviour
                 trained = await RetrainProfilesAsync(); // in case the free plan limit hits
 
             this.loggedInProfile.needsRetraining = false;
+            adjuster.DisableCamera();
             ExportProfileInfo(this.loggedInProfile);
 
             adjuster.HideAllElementsAction();
